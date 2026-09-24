@@ -1,6 +1,5 @@
 /**
- * EDGE-Infinity game logic (v1.5.0)
- * messages from messages.json; audioIdx last field; preload + unlock on start
+ * EDGE-Infinity game logic (v1.6.0)
  */
 (function (window, $) {
   'use strict';
@@ -17,10 +16,9 @@
   try { noSleep = new NoSleep(); } catch (e) {}
 
   var MSG = null;
-  /** phase -> array of Audio, index = audioIdx */
   var audioPools = { go: [], stop: [], finish: [] };
-  var audioReady = false;
   var session = null;
+  var unlocked = false;
 
   function fmt(sec) {
     sec = Math.max(0, Math.floor(sec));
@@ -41,14 +39,11 @@
     return pool[pool.length - 1];
   }
 
-  /* Message layout:
-   * go:     [text, durationSec, fps, audioIdx]
-   * stop:   [text, durationSec, audioIdx]
-   * finish: [text, durationSec, color, fps, audioIdx]
-   */
+  /* go: [text, sec, fps, audioIdx]  stop: [text, sec, audioIdx]
+     finish: [text, sec, color, fps, audioIdx]  first: [text, sec, fps, audioIdx] */
   function getAudioIdx(phase, msg) {
     if (!msg || !msg.length) return -1;
-    if (phase === 'go') return typeof msg[3] === 'number' ? msg[3] : -1;
+    if (phase === 'go' || phase === 'first') return typeof msg[3] === 'number' ? msg[3] : -1;
     if (phase === 'stop') return typeof msg[2] === 'number' ? msg[2] : -1;
     if (phase === 'finish') return typeof msg[4] === 'number' ? msg[4] : -1;
     return -1;
@@ -56,7 +51,7 @@
 
   function getFps(phase, msg) {
     if (!msg) return undefined;
-    if (phase === 'go') return msg[2];
+    if (phase === 'go' || phase === 'first') return msg[2];
     if (phase === 'finish') return msg[3];
     return undefined;
   }
@@ -71,77 +66,47 @@
     return max;
   }
 
+  function ensureAudio(phase, audioIdx) {
+    if (audioIdx < 0) return null;
+    if (!audioPools[phase]) audioPools[phase] = [];
+    var a = audioPools[phase][audioIdx];
+    if (!a) {
+      a = new Audio('audio/' + phase + '/' + phase + '_' + audioIdx + '.wav');
+      a.preload = 'auto';
+      try { a.load(); } catch (e) {}
+      audioPools[phase][audioIdx] = a;
+    }
+    return a;
+  }
+
   function preloadAudio() {
     ['go', 'stop', 'finish'].forEach(function (phase) {
       var max = maxAudioIdx(phase);
       var counts = (MSG.audioCounts && MSG.audioCounts[phase]) || (max + 1);
       var n = Math.max(max + 1, counts || 0);
-      audioPools[phase] = [];
-      for (var i = 0; i < n; i++) {
-        var a = new Audio('audio/' + phase + '/' + phase + '_' + i + '.wav');
-        a.preload = 'auto';
-        try { a.load(); } catch (e) {}
-        audioPools[phase][i] = a;
-      }
+      for (var i = 0; i < n; i++) ensureAudio(phase, i);
     });
-    audioReady = true;
   }
 
-  /** Call inside user gesture (submit click) so mobile browsers unlock playback */
   function unlockAudio() {
-    ['go', 'stop', 'finish'].forEach(function (phase) {
-      (audioPools[phase] || []).forEach(function (a) {
-        if (!a) return;
-        try {
-          a.muted = true;
-          var p = a.play();
-          if (p && p.then) {
-            p.then(function () {
-              a.pause();
-              a.currentTime = 0;
-              a.muted = false;
-            }).catch(function () {
-              a.muted = false;
-            });
-          } else {
-            a.pause();
-            a.currentTime = 0;
-            a.muted = false;
-          }
-        } catch (e) {
-          try { a.muted = false; } catch (e2) {}
-        }
-      });
-    });
-  }
-
-  function playVoice(phase, audioIdx) {
-    if (audioIdx === undefined || audioIdx === null || audioIdx < 0) return;
-    var list = audioPools[phase] || [];
-    var a = list[audioIdx];
-    if (!a) {
-      a = new Audio('audio/' + phase + '/' + phase + '_' + audioIdx + '.wav');
-      list[audioIdx] = a;
-      audioPools[phase] = list;
-    }
-    // stop others in same phase first, then all phases briefly
-    ['go', 'stop', 'finish'].forEach(function (ph) {
-      (audioPools[ph] || []).forEach(function (el) {
-        if (!el) return;
-        try { el.pause(); el.currentTime = 0; } catch (e) {}
-      });
-    });
+    if (unlocked) return;
+    var sample = ensureAudio('go', 0);
+    if (!sample) return;
     try {
-      a.muted = false;
-      a.currentTime = 0;
-      var p = a.play();
-      if (p && p.catch) {
-        p.catch(function (err) {
-          console.warn('playVoice failed', phase, audioIdx, err);
-        });
-      }
+      sample.muted = true;
+      var p = sample.play();
+      var done = function () {
+        try {
+          sample.pause();
+          sample.currentTime = 0;
+          sample.muted = false;
+        } catch (e) {}
+        unlocked = true;
+      };
+      if (p && p.then) p.then(done).catch(done);
+      else done();
     } catch (e) {
-      console.warn('playVoice error', e);
+      unlocked = true;
     }
   }
 
@@ -152,6 +117,36 @@
         try { el.pause(); el.currentTime = 0; } catch (e) {}
       });
     });
+    $('#voiceLibBody .vl-play').removeClass('playing');
+  }
+
+  function playVoice(phase, audioIdx) {
+    if (audioIdx === undefined || audioIdx === null || audioIdx < 0) return;
+    // first intro reuses go pool
+    var poolPhase = phase === 'first' ? 'go' : phase;
+    var a = ensureAudio(poolPhase, audioIdx);
+    if (!a) return;
+    stopAllAudio();
+    try {
+      a.muted = false;
+      a.currentTime = 0;
+      var p = a.play();
+      if (p && p.catch) {
+        p.catch(function (err) {
+          console.warn('playVoice failed', poolPhase, audioIdx, err);
+          // retry once after unlock
+          unlockAudio();
+          setTimeout(function () {
+            try {
+              a.currentTime = 0;
+              a.play().catch(function () {});
+            } catch (e2) {}
+          }, 80);
+        });
+      }
+    } catch (e) {
+      console.warn('playVoice error', e);
+    }
   }
 
   function showBg(phase) {
@@ -171,6 +166,49 @@
     $('#elapsed').text(fmt(elapsed));
     $('#remain').text(fmt(remain));
     $('#targetTime').text(fmt(session.targetSec));
+  }
+
+  function stripHtml(html) {
+    var d = document.createElement('div');
+    d.innerHTML = html;
+    return (d.textContent || d.innerText || '').replace(/\s+/g, ' ').trim();
+  }
+
+  function buildVoiceLibrary() {
+    var $body = $('#voiceLibBody');
+    $body.empty();
+    function section(title, phase, list) {
+      $body.append($('<h4/>').text(title));
+      list.forEach(function (row) {
+        var idx = getAudioIdx(phase, row);
+        var text = stripHtml(row[0]);
+        if (text.length > 72) text = text.slice(0, 72) + '…';
+        var $row = $('<div class="vl-row"/>');
+        $row.append($('<span class="vl-idx"/>').text(idx >= 0 ? idx : '—'));
+        $row.append($('<span class="vl-text"/>').text(text));
+        var $btn = $('<button type="button" class="vl-play" title="播放">▶</button>');
+        $btn.attr('data-phase', phase === 'first' ? 'go' : phase);
+        $btn.attr('data-idx', idx);
+        $btn.on('click', function () {
+          unlockAudio();
+          var ph = $(this).attr('data-phase');
+          var id = parseInt($(this).attr('data-idx'), 10);
+          stopAllAudio();
+          $(this).addClass('playing');
+          playVoice(ph, id);
+          var a = ensureAudio(ph, id);
+          if (a) {
+            a.onended = function () { $btn.removeClass('playing'); };
+          }
+        });
+        $row.append($btn);
+        $body.append($row);
+      });
+    }
+    if (MSG.first && MSG.first.length) section('开场', 'first', MSG.first);
+    section('进行中 Go', 'go', MSG.go || []);
+    section('停止 Stop', 'stop', MSG.stop || []);
+    section('最终 Finish', 'finish', MSG.finish || []);
   }
 
   function pickMessage(phase, modeKey, useFleshlight, lastPick, recentTags) {
@@ -213,8 +251,7 @@
 
     var chosen = weightedPick(candidates, weights);
     lastPick[phase] = chosen;
-    var chosenTags = tags[chosen] || [];
-    return { index: chosen, msg: list[chosen], tags: chosenTags };
+    return { index: chosen, msg: list[chosen], tags: tags[chosen] || [] };
   }
 
   function nextPassType(passNum, duration, targetSec, modeKey) {
@@ -245,8 +282,6 @@
       startMs: Date.now(),
       targetSec: targetSec,
       modeKey: modeKey,
-      cumFactor: cumFactor,
-      fleshlight: useFleshlight,
       pass: 0,
       lastPick: { go: -1, stop: -1, finish: -1 },
       recentTags: []
@@ -258,7 +293,6 @@
 
     $('#choose').hide();
     $('#gamewrapper').show();
-
     try { if (noSleep) noSleep.enable(); } catch (e) {}
 
     var $mw = $('#mainwrapper');
@@ -319,6 +353,8 @@
           $mw.removeClass('go stop finish cancel').addClass('go');
           showBg('go');
           $('#message').html(first[0]);
+          // 开场也播语音：first 最后一项 audioIdx → go_{n}.wav
+          playVoice('first', getAudioIdx('first', first));
           updateFlash(first[2]);
           showProgressAndGoOn(first[1] * 1000 * multiplier, goOn, 'jerkbar');
           return;
@@ -379,17 +415,19 @@
       e.stopPropagation();
       if (!MSG) return;
       unlockAudio();
-      var modeKey = $('#choose select[name=mode]').val();
-      var durationMin = parseInt($('#choose select[name=duration]').val(), 10);
-      var cum = parseFloat($('#choose select[name=cum]').val());
-      var fleshlight = $('#choose select[name=fleshlight]').val() === '1';
-      window.hasFleshlight = fleshlight;
       startSession({
-        modeKey: modeKey,
-        durationMin: durationMin,
-        cumFactor: cum,
-        fleshlight: fleshlight
+        modeKey: $('#choose select[name=mode]').val(),
+        durationMin: parseInt($('#choose select[name=duration]').val(), 10),
+        cumFactor: parseFloat($('#choose select[name=cum]').val()),
+        fleshlight: $('#choose select[name=fleshlight]').val() === '1'
       });
+    });
+
+    $('#btnVoiceLib').on('click', function () {
+      unlockAudio();
+      var $p = $('#voiceLibPanel');
+      $p.toggleClass('open');
+      $(this).text($p.hasClass('open') ? '主人留音 ▴' : '主人留音 ▾');
     });
 
     setInterval(updateTimerUI, 250);
@@ -406,6 +444,7 @@
         window.messages = data;
         window.images = data.images || { go: [], stop: [], finish: [] };
         preloadAudio();
+        buildVoiceLibrary();
         bindUI();
         $('#bootStatus').text('就绪 v' + (data.version || '') + ' · 语音已预载');
       })

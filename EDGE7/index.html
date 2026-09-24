@@ -7,17 +7,21 @@
 <meta name="description" content="服从主人的指令，边缘、憋精、耻辱自慰……只有主人才能决定你这根贱狗鸡巴是否可以射精。" />
 <link rel="stylesheet" href="minimize-css.css" />
 <style>
-#message { white-space: pre-line; word-break: break-word; line-height: 1.65; }
+#message {
+  white-space: pre-line;
+  word-break: break-word;
+  line-height: 1.45;
+  font-size: 1.12rem;
+  padding: 6px 4px;
+}
 #timer {
-  font-size: 18px;
+  font-size: 17px;
   font-weight: bold;
   color: #ffcc00;
-  margin: 12px 0;
+  margin: 10px 0;
   text-align: center;
   cursor: help;
   position: relative;
-  display: inline-block;
-  width: 100%;
 }
 #timerTip {
   display: none;
@@ -29,16 +33,87 @@
   color: #eee;
   border: 1px solid #666;
   border-radius: 6px;
-  padding: 8px 12px;
-  font-size: 13px;
+  padding: 6px 10px;
+  font-size: 12px;
   font-weight: normal;
   white-space: nowrap;
   z-index: 20;
-  box-shadow: 0 4px 12px rgba(0,0,0,.35);
 }
 #timer:hover #timerTip,
 #timer:focus-within #timerTip { display: block; }
+#progress {
+  max-width: 420px;
+  margin: 12px auto 0;
+}
 #bootStatus { text-align: center; color: #888; font-size: 12px; margin-top: 6px; }
+
+/* 主人留音 */
+#voiceLibraryWrap { margin-top: 18px; text-align: center; }
+#btnVoiceLib {
+  background: #333;
+  color: #ffcc00;
+  border: 1px solid #666;
+  border-radius: 6px;
+  padding: 8px 16px;
+  cursor: pointer;
+  font-size: 14px;
+}
+#btnVoiceLib:hover { background: #444; }
+#voiceLibPanel {
+  display: none;
+  margin-top: 12px;
+  text-align: left;
+  max-width: 560px;
+  margin-left: auto;
+  margin-right: auto;
+  background: rgba(0,0,0,.35);
+  border: 1px solid #555;
+  border-radius: 8px;
+  padding: 10px 12px 14px;
+  max-height: 360px;
+  overflow: auto;
+}
+#voiceLibPanel.open { display: block; }
+#voiceLibPanel h4 {
+  margin: 10px 0 6px;
+  font-size: 13px;
+  color: #ffcc00;
+  border-bottom: 1px solid #444;
+  padding-bottom: 4px;
+}
+#voiceLibPanel h4:first-child { margin-top: 0; }
+.vl-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 5px 0;
+  border-bottom: 1px solid rgba(255,255,255,.06);
+  font-size: 13px;
+  line-height: 1.35;
+}
+.vl-row .vl-idx {
+  flex: 0 0 28px;
+  color: #888;
+  font-family: monospace;
+  padding-top: 2px;
+}
+.vl-row .vl-text { flex: 1; color: #ddd; }
+.vl-play {
+  flex: 0 0 32px;
+  height: 28px;
+  width: 32px;
+  border: none;
+  border-radius: 50%;
+  background: #2a2a2a;
+  color: #ffcc00;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 28px;
+  padding: 0;
+}
+.vl-play:hover { background: #444; }
+.vl-play.playing { background: #5a4010; color: #fff; }
+#voiceLibHint { font-size: 12px; color: #999; margin: 0 0 8px; }
 </style>
 <script src="nosleep.js"></script>
 <script src="minimize-js.js"></script>
@@ -108,10 +183,18 @@
 <div class="form-group">
 <div class="col-sm-4"></div>
 <div class="col-sm-8">
-<button type="submit" id="submit" class="btn btn-default btn-primary" style="margin-bottom:20px">开始调教任务</button>
+<button type="submit" id="submit" class="btn btn-default btn-primary" style="margin-bottom:12px">开始调教任务</button>
 </div>
 </div>
 </form>
+
+<div id="voiceLibraryWrap">
+  <button type="button" id="btnVoiceLib">主人留音 ▾</button>
+  <div id="voiceLibPanel" aria-live="polite">
+    <p id="voiceLibHint">点 ▶ 试听对应语音（不参与玩法，仅检查 / 彩蛋）</p>
+    <div id="voiceLibBody"></div>
+  </div>
+</div>
 <div id="bootStatus">加载中…</div>
 </div>
 
@@ -120,7 +203,7 @@
 <div id="flash" class="off" style="display:none"><span>自慰</span></div>
 <div id="message"></div>
 
-<div id="timer" tabindex="0" title="">
+<div id="timer" tabindex="0">
   已用时间: <span id="elapsed">00:00</span>
   <div id="timerTip">剩余约 <span id="remain">--:--</span> · 预估总长 <span id="targetTime">--:--</span></div>
 </div>
