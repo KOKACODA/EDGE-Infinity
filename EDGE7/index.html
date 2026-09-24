@@ -218,7 +218,9 @@ function playVoice(type, index) {
 <div id="message"></div>
 
 <div id="timer" style="font-size: 18px; font-weight: bold; color: #ffcc00; margin: 12px 0; text-align: center;">
-	已用时间: <span id="elapsed">0</span> 秒
+	已用: <span id="elapsed">00:00</span>
+	<span style="opacity:.7;margin:0 8px;">|</span>
+	预估总长: <span id="targetTime">--:--</span>
 </div>
 
 <div id="progress">
@@ -239,12 +241,28 @@ function playVoice(type, index) {
 </div>
 
 <script>
-let startTime = Date.now();
-const elapsedEl = document.getElementById('elapsed');
-setInterval(() => {
-    const elapsed = Math.floor((Date.now() - startTime) / 1000);
-    elapsedEl.textContent = elapsed;
-}, 1000);
+(function () {
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+  function fmt(sec) {
+    sec = Math.max(0, Math.floor(sec));
+    return pad(Math.floor(sec / 60)) + ':' + pad(sec % 60);
+  }
+  window.__edgeTimerRunning = false;
+  window.__edgeGameStart = 0;
+  window.__edgeTargetDuration = 0;
+  var elapsedEl = document.getElementById('elapsed');
+  var targetEl = document.getElementById('targetTime');
+  setInterval(function () {
+    if (!window.__edgeTimerRunning || !window.__edgeGameStart) {
+      return;
+    }
+    var elapsed = (Date.now() - window.__edgeGameStart) / 1000;
+    if (elapsedEl) elapsedEl.textContent = fmt(elapsed);
+    if (targetEl && window.__edgeTargetDuration) {
+      targetEl.textContent = fmt(window.__edgeTargetDuration);
+    }
+  }, 250);
+})();
 </script>
 </body>
 </html>

@@ -1239,7 +1239,28 @@ var modes = {
 '2' : [1, 1],
 '3' : [0.75, 0.6],
 '4' : [0.6, 0.3]
-}
+};
+
+/* tag map: index -> tags (must match messages.go / stop / finish order) */
+var messageTags = {
+	go: [
+		['base','slow'],['base','fast'],['base','fast'],['base','edge'],['base','edge'],
+		['base','pain'],['base','humiliate'],['base','humiliate'],['base','fast'],['base','pain'],
+		['base','humiliate'],
+		['frenulum','edge'],['frenulum','edge'],['frenulum','edge'],
+		['prostate','edge'],['prostate','edge'],['prostate','edge'],['prostate','edge'],['prostate','edge'],
+		['fleshlight','prostate'],['fleshlight','prostate','edge']
+	],
+	stop: [
+		['base'],['base'],['humiliate'],['humiliate'],['base'],
+		['humiliate'],['pain'],
+		['prostate'],['prostate'],['prostate'],['prostate']
+	],
+	finish: [
+		['deny'],['allow'],['allow'],['allow'],['allow'],
+		['allow'],['allow'],['allow'],['allow','prostate']
+	]
+};
 
 var images = {
 'go': [],
@@ -1247,59 +1268,91 @@ var images = {
 'finish': []
 };
 
+function formatTime(sec) {
+	sec = Math.max(0, Math.floor(sec));
+	var m = Math.floor(sec / 60);
+	var s = sec % 60;
+	return (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
+}
+
+function weightedPick(pool, weights) {
+	var total = 0;
+	for (var i = 0; i < weights.length; i++) total += weights[i];
+	if (total <= 0) return pool[Math.floor(Math.random() * pool.length)];
+	var r = Math.random() * total;
+	for (var j = 0; j < pool.length; j++) {
+		r -= weights[j];
+		if (r <= 0) return pool[j];
+	}
+	return pool[pool.length - 1];
+}
+
 $(document).ready(function() {
 $('#submit').click(function(e) {
-	$('#choose').hide();
-	var mode = modes[$('#choose select[name=mode]').val()];
-	var duration = parseInt($('#choose select[name=duration]').val());
-	var cum = parseFloat($('#choose select[name=cum]').val());
-	var controlStroke = $('#choose select[name=strokeControl]').val();
-	try {
-		noSleep.enable();
-	}catch(e){
-	}
-
-	start(duration * 60 * (Math.random() + 0.5), mode[0], mode[1], cum, controlStroke);
-	e.stopPropagation();
 	e.preventDefault();
+	e.stopPropagation();
+	$('#choose').hide();
+	var modeKey = $('#choose select[name=mode]').val();
+	var mode = modes[modeKey];
+	var durationMin = parseInt($('#choose select[name=duration]').val(), 10);
+	var cum = parseFloat($('#choose select[name=cum]').val());
+	var fleshlight = ($('#choose select[name=fleshlight]').val() === '1');
+	hasFleshlight = fleshlight;
+	var controlStroke = true;
+	try { noSleep.enable(); } catch (err) {}
+
+	/* duration: tighter variance on higher difficulty */
+	var variance = 0.35 + (1 - parseInt(modeKey, 10) / 4) * 0.3;
+	var factor = (1 - variance / 2) + Math.random() * variance;
+	var targetSec = durationMin * 60 * factor;
+
+	start(targetSec, mode[0], mode[1], cum, controlStroke, {
+		modeKey: modeKey,
+		fleshlight: fleshlight,
+		durationMin: durationMin
+	});
 });
-var start = function(targetDuration, baseMultiplier, pauseMultiplier, cumFactor, controlStroke) {
+
+var start = function(targetDuration, baseMultiplier, pauseMultiplier, cumFactor, controlStroke, opts) {
+	opts = opts || {};
+	var modeKey = parseInt(opts.modeKey || '2', 10);
+	var useFleshlight = !!opts.fleshlight;
 	var $mw = $('#mainwrapper');
 	$('#gamewrapper').show();
-		/*ga('send', 'pageview', {
-		'page': '/start',
-		'title': 'Game started',
-		'dimension1': $('#choose select[name=mode] option:selected').text(),
-		'dimension2': $('#choose select[name=duration] option:selected').text(),
-		'dimension3': $('#choose select[name=cum] option:selected').text()});*/
-	console.log('targetDuration', targetDuration / 60);
+
+	/* timer starts only when game starts */
+	window.__edgeGameStart = Date.now();
+	window.__edgeTargetDuration = targetDuration;
+	window.__edgeTimerRunning = true;
+
+	var lastPick = { go: -1, stop: -1, finish: -1 };
+	var recentTags = [];
+
+	console.log('targetDuration min', (targetDuration / 60).toFixed(2), 'mode', modeKey, 'fleshlight', useFleshlight, 'cum', cumFactor);
+
 	var showImage = function(imgType) {
-		var images = window.images[imgType];
-		var numImages = images.length;
-		var randImg = Math.floor(Math.random() * 20);
-		console.log(randImg, numImages);
-		if (numImages > randImg) {
-			var newImg = images[randImg];
+		var imgs = window.images[imgType] || [];
+		if (imgs.length > 0) {
+			var newImg = imgs[Math.floor(Math.random() * imgs.length)];
 			$('#mainwrapper').css('background-image', 'url(' + newImg + ')');
 		} else {
 			$('#mainwrapper').css('background-image', 'none');
 		}
 	};
+
 	var end = function() {
 		$('#message').html(gameover_postcum);
-//		$mw.removeClass('cancel').removeClass('go').removeClass('finish');
 		$mw.removeClass('cancel').removeClass('finish');
-		try {
-			noSleep.disable();
-		}catch(e){
-		}
+		window.__edgeTimerRunning = false;
+		try { noSleep.disable(); } catch (err) {}
 	};
+
 	var showProgressAndGoOn = function(timeout, callback, bar) {
-		var start = new Date().getTime();
+		var t0 = new Date().getTime();
 		var continueProgress = function() {
-			var current = new Date().getTime() - start;
-			var percent = current/timeout * 100;
-			$('#progress .' + bar + ' div.bar').css('width', percent + '%');
+			var current = new Date().getTime() - t0;
+			var percent = current / timeout * 100;
+			$('#progress .' + bar + ' div.bar').css('width', Math.min(percent, 100) + '%');
 			if (percent > 100) {
 				callback();
 			} else {
@@ -1308,106 +1361,159 @@ var start = function(targetDuration, baseMultiplier, pauseMultiplier, cumFactor,
 		};
 		continueProgress();
 	};
+
 	var updateFlash = function(fps) {
 		clearInterval(window.flashInterval);
-		if (fps == undefined || !controlStroke) {
-			return;
-		}
+		if (fps === undefined || !controlStroke) return;
 		var i = 0;
 		var doUpdateFlash = function() {
-			var newClass = 'off';
-			if (i % 2 == 0) {
-				newClass = 'on';
-			}
-			$('#flash').removeClass('on off').addClass(newClass);
+			$('#flash').removeClass('on off').addClass(i % 2 === 0 ? 'on' : 'off');
 			i++;
 		};
 		var timeout = 1000 / fps / 2 * baseMultiplier;
 		window.flashInterval = setInterval(doUpdateFlash, timeout);
 	};
+
+	/* Build eligible indices for a phase, filtered by options + anti-repeat */
+	var pickMessage = function(phase) {
+		var list = messages[phase] || [];
+		var tags = messageTags[phase] || [];
+		var candidates = [];
+		for (var i = 0; i < list.length; i++) {
+			var t = tags[i] || ['base'];
+			if (!useFleshlight && t.indexOf('fleshlight') >= 0) continue;
+			/* low difficulty: reduce prostate weight by skipping sometimes */
+			if (modeKey <= 1 && t.indexOf('prostate') >= 0 && Math.random() < 0.55) continue;
+			/* high difficulty prefers edge/pain/prostate */
+			candidates.push(i);
+		}
+		if (candidates.length === 0) {
+			for (var j = 0; j < list.length; j++) candidates.push(j);
+		}
+		/* drop last index if possible */
+		var filtered = candidates.filter(function(idx) { return idx !== lastPick[phase]; });
+		if (filtered.length > 0) candidates = filtered;
+
+		var weights = candidates.map(function(idx) {
+			var t = tags[idx] || ['base'];
+			var w = 1;
+			if (modeKey >= 3) {
+				if (t.indexOf('edge') >= 0) w += 1.5;
+				if (t.indexOf('prostate') >= 0) w += 1.2;
+				if (t.indexOf('pain') >= 0) w += 0.8;
+				if (t.indexOf('fast') >= 0) w += 0.6;
+			} else if (modeKey <= 1) {
+				if (t.indexOf('slow') >= 0) w += 1.5;
+				if (t.indexOf('base') >= 0) w += 0.8;
+				if (t.indexOf('humiliate') >= 0) w += 0.5;
+			} else {
+				if (t.indexOf('edge') >= 0) w += 0.7;
+				if (t.indexOf('humiliate') >= 0) w += 0.5;
+			}
+			if (useFleshlight && t.indexOf('fleshlight') >= 0) w += 2;
+			/* diversify: lower weight if tag recently used */
+			for (var r = 0; r < recentTags.length; r++) {
+				if (t.indexOf(recentTags[r]) >= 0) w *= 0.55;
+			}
+			return Math.max(w, 0.15);
+		});
+
+		var chosen = weightedPick(candidates, weights);
+		lastPick[phase] = chosen;
+		var chosenTags = tags[chosen] || [];
+		recentTags = recentTags.concat(chosenTags).slice(-6);
+		return { index: chosen, msg: list[chosen] };
+	};
+
+	/* go/stop rhythm: harder modes more go-heavy early, more chaotic late */
+	var nextPassType = function(passNum, duration) {
+		if (passNum === 1) return 'go';
+		var progress = duration / targetDuration;
+		var goBias = 0.5;
+		if (modeKey >= 3) goBias = 0.58;
+		if (modeKey <= 1) goBias = 0.48;
+		if (progress > 0.75) goBias += 0.08;
+		/* still roughly alternate but with noise */
+		var preferGo = (passNum % 2 !== 0);
+		if (Math.random() < 0.22) preferGo = !preferGo;
+		if (Math.random() < goBias) preferGo = preferGo || Math.random() < 0.35;
+		return preferGo ? 'go' : 'stop';
+	};
+
 	var goOn = function() {
 		pass++;
 		var duration = (new Date().getTime() - startTime) / 1000;
 		var multiplier = baseMultiplier;
-		if (duration > targetDuration / 4 * 3) {
+		if (duration > targetDuration * 0.75) {
 			multiplier = multiplier / 4;
 			$('#speed').html(message_phase3);
-			console.log('going four times as fast');
-		} else if (duration > targetDuration / 2) {
+		} else if (duration > targetDuration * 0.5) {
 			multiplier = multiplier / 2;
 			$('#speed').html(message_phase2);
-			console.log('going twice as fast');
 		}
-		var passType = pass % 2 != 0 ? 'go' : 'stop';
-		if (passType == 'stop') {
+
+		var passType = nextPassType(pass, duration);
+		if (passType === 'stop') {
 			multiplier = multiplier * pauseMultiplier;
 		}
-		console.log('duration', duration);
-		try {
-			noSleep.disable();
-			noSleep.enable();
-		}catch(e){
-		}
-		if (duration < targetDuration || passType == 'go') {
-			var ourMessages  = pass == 1 ? messages['first'] : messages[passType];
-			$mw.removeClass('go').removeClass('stop').addClass(passType);
-			showImage(passType);
-			var randomMessage = ourMessages[Math.floor(Math.random()*ourMessages.length)];
-			$('#message').html(randomMessage[0]);
-      // ==================== 新增：播放对应语音 ====================
-let currentType = 'go';
-if ($mw.hasClass('stop')) currentType = 'stop';
-else if ($mw.hasClass('finish')) currentType = 'finish';
 
-const messageIndex = ourMessages.indexOf(randomMessage);
-if (messageIndex !== -1) {
-    playVoice(currentType, messageIndex);
-}
-			updateFlash(randomMessage[2]);
-			showProgressAndGoOn(randomMessage[1] * 1000 * multiplier, goOn, 'jerkbar');
-		} else {
-			var ourMessages = messages['finish'];
-			var randomMessage = ourMessages[Math.floor(Math.random()*ourMessages.length)];
-			
-			// random "outcum"
-			if (Math.random() >= cumFactor) {
-				randomMessage = ourMessages[0]; // no cum message
-			}
-				
-			if (cumFactor == '0') {
-				$mw.removeClass('go').removeClass('stop');
-				try {
-					noSleep.disable();
-				}catch(e){
-				}
-				$('#message').html(gameover_nocum1 + "<br />" + gameover_nocum2 + "<br /><br /><small>" + gameover_nocum3 + "</small>");
-//				ga('send', 'event', 'edging', 'endreached', 'completednocum');
+		try { noSleep.disable(); noSleep.enable(); } catch (err) {}
+
+		if (duration < targetDuration || passType === 'go') {
+			if (pass === 1) {
+				var first = messages.first[0];
+				$mw.removeClass('go stop finish').addClass('go');
+				showImage('go');
+				$('#message').html(first[0]);
+				updateFlash(first[2]);
+				showProgressAndGoOn(first[1] * 1000 * multiplier, goOn, 'jerkbar');
 				return;
-			} else if (randomMessage[2] != 'red') {
-				// cum allowed
+			}
+
+			var picked = pickMessage(passType);
+			$mw.removeClass('go stop finish').addClass(passType);
+			showImage(passType);
+			$('#message').html(picked.msg[0]);
+			if (typeof playVoice === 'function') {
+				playVoice(passType, picked.index);
+			}
+			updateFlash(picked.msg[2]);
+			showProgressAndGoOn(picked.msg[1] * 1000 * multiplier, goOn, 'jerkbar');
+		} else {
+			/* finish phase */
+			var finishPick = pickMessage('finish');
+			var randomMessage = finishPick.msg;
+
+			if (Math.random() >= cumFactor) {
+				randomMessage = messages.finish[0];
+				finishPick.index = 0;
+			}
+
+			if (cumFactor === 0 || cumFactor === '0') {
+				$mw.removeClass('go stop finish');
+				window.__edgeTimerRunning = false;
+				try { noSleep.disable(); } catch (err) {}
+				$('#message').html(gameover_nocum1 + "<br />" + gameover_nocum2 + "<br /><br /><small>" + gameover_nocum3 + "</small>");
+				return;
+			} else if (randomMessage[2] !== 'red') {
 				showImage('finish');
-				$mw.removeClass('stop').addClass('finish');
+				$mw.removeClass('go stop').addClass('finish');
+				if (typeof playVoice === 'function') playVoice('finish', finishPick.index);
 				showProgressAndGoOn(randomMessage[1] * 1000, end, 'cumbar');
-//				ga('send', 'event', 'edging', 'endreached', 'cum');
 			} else {
-				$mw.removeClass('go').removeClass('stop').addClass('cancel');
+				$mw.removeClass('go stop').addClass('cancel');
+				if (typeof playVoice === 'function') playVoice('finish', finishPick.index);
 				showProgressAndGoOn(randomMessage[1] * 1000, function() {
-					try {
-						noSleep.disable();
-					}catch(e){
-					}
+					try { noSleep.disable(); } catch (err) {}
 					window.location.reload();
 				}, 'jerkbar');
-//				ga('send', 'event', 'edging', 'endreached', 'nocum');
 			}
 			$('#message').html(randomMessage[0]);
 		}
 	};
+
 	var startTime = new Date().getTime();
 	var pass = 0;
 	goOn();
-}
+};
 });
-
-
-

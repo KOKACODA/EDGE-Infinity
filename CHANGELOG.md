@@ -2,23 +2,38 @@
 
 All notable changes to EDGE-Infinity are documented in this file.
 
+## [1.2.0] - 2026-09-24
+
+### Fixed
+- **Timer bug**: elapsed time used to start counting from page load; now starts only when the session begins.
+- Timer display uses `MM:SS` and shows estimated total duration.
+
+### Changed
+- Instruction selection is **weighted by difficulty** (mode): higher difficulty favors edge / prostate / intensity tags.
+- **Fleshlight option** now filters messages (fleshlight-tagged lines only appear when enabled).
+- Anti-repeat: avoids consecutive identical lines; recent tag diversity soft-penalty.
+- Go/Stop rhythm is no longer strict alternate-only; slight chaos + mode bias.
+- Session length variance scales with difficulty (harder → tighter around selected minutes).
+- Finish-phase voice playback when allowed / denied.
+
+### Added
+- Message tag map (`messageTags`) for option-aware random selection.
+
 ## [1.1.0] - 2026-09-24
 
 ### Changed
-- Deploy target switched from Cloudflare Workers Assets to **Cloudflare Pages** (`edge-infinity.pages.dev`).
-- Site entry is now only `EDGE7/index.html` (content from former `index7.html`).
-- Removed unused `index7.html` and previous duplicate `index.html`.
-- Commit author fixed to GitHub account **KOKACODA** (noreply email bound to user id).
-- Project config uses `wrangler.toml` with `pages_build_output_dir = "EDGE7"`.
+- Deploy target: Cloudflare Pages (`edge-infinity.pages.dev`).
+- Entry file: only `EDGE7/index.html` (from former index7).
+- Commit author bound to GitHub user **KOKACODA**.
 
 ### Fixed
-- Audio preload loop counts matched real file counts (go=21, stop=11, finish=9).
+- Audio preload counts matched real files (go=21, stop=11, finish=9).
 
 ### Added
-- `VERSION` and `CHANGELOG.md` for version management.
-- Optimized `_headers` (long-cache audio/css/js, short-cache HTML).
+- `VERSION` + `CHANGELOG.md`.
+- Caching `_headers`.
 
 ## [1.0.0] - 2026-09-24
 
 ### Added
-- Initial import from KOKACODA/EDGE with Cloudflare static hosting setup.
+- Initial import from upstream EDGE static site.
