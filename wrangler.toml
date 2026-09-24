@@ -1,0 +1,4 @@
+# Cloudflare Pages project
+name = "edge-infinity"
+compatibility_date = "2026-04-30"
+pages_build_output_dir = "EDGE7"
