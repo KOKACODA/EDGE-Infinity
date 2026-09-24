@@ -1,5 +1,5 @@
 /**
- * EDGE-Infinity game logic (v1.6.0)
+ * EDGE-Infinity game logic (v1.7.0)
  */
 (function (window, $) {
   'use strict';
@@ -178,14 +178,17 @@
     var $body = $('#voiceLibBody');
     $body.empty();
     function section(title, phase, list) {
-      $body.append($('<h4/>').text(title));
+      var $table = $('<table class="vl-table"/>');
+      $table.append($('<caption/>').text(title));
+      var $thead = $('<thead><tr><th>编号</th><th>语句</th><th>试听</th></tr></thead>');
+      $table.append($thead);
+      var $tbody = $('<tbody/>');
       list.forEach(function (row) {
         var idx = getAudioIdx(phase, row);
-        var text = stripHtml(row[0]);
-        if (text.length > 72) text = text.slice(0, 72) + '…';
-        var $row = $('<div class="vl-row"/>');
-        $row.append($('<span class="vl-idx"/>').text(idx >= 0 ? idx : '—'));
-        $row.append($('<span class="vl-text"/>').text(text));
+        var full = stripHtml(row[0]);
+        var $tr = $('<tr/>');
+        $tr.append($('<td class="vl-idx"/>').text(idx >= 0 ? idx : '—'));
+        $tr.append($('<td class="vl-text"/>').text(full));
         var $btn = $('<button type="button" class="vl-play" title="播放">▶</button>');
         $btn.attr('data-phase', phase === 'first' ? 'go' : phase);
         $btn.attr('data-idx', idx);
@@ -201,14 +204,38 @@
             a.onended = function () { $btn.removeClass('playing'); };
           }
         });
-        $row.append($btn);
-        $body.append($row);
+        $tr.append($('<td class="vl-act"/>').append($btn));
+        $tbody.append($tr);
       });
+      $table.append($tbody);
+      $body.append($table);
     }
     if (MSG.first && MSG.first.length) section('开场', 'first', MSG.first);
     section('进行中 Go', 'go', MSG.go || []);
     section('停止 Stop', 'stop', MSG.stop || []);
     section('最终 Finish', 'finish', MSG.finish || []);
+  }
+
+  function showHome() {
+    $('#voiceLibPage').removeClass('open').hide();
+    $('#gamewrapper').hide();
+    $('#choose').show();
+  }
+
+  function showVoiceLib() {
+    unlockAudio();
+    stopAllAudio();
+    $('#choose').hide();
+    $('#gamewrapper').hide();
+    $('#voiceLibPage').addClass('open').show();
+  }
+
+  function applyScale(scale) {
+    scale = Math.max(0.8, Math.min(1.6, scale));
+    document.documentElement.style.setProperty('--ui-scale', String(scale));
+    $('#scaleValue').text(Math.round(scale * 100) + '%');
+    try { localStorage.setItem('edge_ui_scale', String(scale)); } catch (e) {}
+    return scale;
   }
 
   function pickMessage(phase, modeKey, useFleshlight, lastPick, recentTags) {
@@ -292,6 +319,7 @@
     window.__edgeTimerRunning = true;
 
     $('#choose').hide();
+    $('#voiceLibPage').hide();
     $('#gamewrapper').show();
     try { if (noSleep) noSleep.enable(); } catch (e) {}
 
@@ -424,10 +452,24 @@
     });
 
     $('#btnVoiceLib').on('click', function () {
-      unlockAudio();
-      var $p = $('#voiceLibPanel');
-      $p.toggleClass('open');
-      $(this).text($p.hasClass('open') ? '主人留音 ▴' : '主人留音 ▾');
+      showVoiceLib();
+    });
+    $('#btnBackHome').on('click', function () {
+      stopAllAudio();
+      showHome();
+    });
+
+    var scale = 1;
+    try {
+      var saved = parseFloat(localStorage.getItem('edge_ui_scale'));
+      if (!isNaN(saved)) scale = saved;
+    } catch (e) {}
+    applyScale(scale);
+    $('#scaleUp').on('click', function () {
+      applyScale((parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--ui-scale')) || 1) + 0.1);
+    });
+    $('#scaleDown').on('click', function () {
+      applyScale((parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--ui-scale')) || 1) - 0.1);
     });
 
     setInterval(updateTimerUI, 250);
@@ -435,6 +477,7 @@
 
   function boot() {
     $('#gamewrapper').hide();
+    $('#voiceLibPage').hide();
     $('#choose').show();
 
     fetch('messages.json')

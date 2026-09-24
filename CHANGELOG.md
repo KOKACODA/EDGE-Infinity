@@ -1,22 +1,16 @@
 # Changelog
 
-## [1.6.0] - 2026-09-24
-
-### Fixed
-- Opening (first) line now plays voice via `audioIdx` → `go_{n}.wav`.
-- Restored **original** instruction / phase / gameover copy (had been softened in 1.3).
-- Audio unlock + retry on play failure.
-
-### Added
-- Home page **主人留音**: expandable list of all lines with ▶ play (preview only).
+## [1.7.0] - 2026-09-24
 
 ### Changed
-- Tighter message line-height; slightly larger text; progress bars centered (`max-width: 420px`).
+- **主人留音** button placed beside the main title; opens a **separate page** with table layout (编号 / 语句 / 试听).
+- Larger message font and taller centered progress bars.
+- **UI scale control** (bottom-right − / +), range 80%–160%, remembered in localStorage.
 
-## [1.5.0] - 2026-09-24
+## [1.6.0] - 2026-09-24
 
-- Classic UI; elapsed-only timer with hover tip; audio preload.
+- Restored original copy; first-line voice; voice library preview.
 
-## [1.4.0] – [1.0.0]
+## [1.5.0] – [1.0.0]
 
 See git history.
