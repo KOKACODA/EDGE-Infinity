@@ -1,6 +1,6 @@
 /**
- * EDGE-Infinity game logic (v1.4.0)
- * Messages & tags load from messages.json
+ * EDGE-Infinity game logic (v1.5.0)
+ * messages from messages.json; audioIdx last field; preload + unlock on start
  */
 (function (window, $) {
   'use strict';
@@ -17,8 +17,9 @@
   try { noSleep = new NoSleep(); } catch (e) {}
 
   var MSG = null;
-  /** @type {Object.<string, HTMLAudioElement>} on-demand cache key = "go:3" */
-  var audioCache = {};
+  /** phase -> array of Audio, index = audioIdx */
+  var audioPools = { go: [], stop: [], finish: [] };
+  var audioReady = false;
   var session = null;
 
   function fmt(sec) {
@@ -40,11 +41,10 @@
     return pool[pool.length - 1];
   }
 
-  /* Message layout (approach B):
+  /* Message layout:
    * go:     [text, durationSec, fps, audioIdx]
    * stop:   [text, durationSec, audioIdx]
    * finish: [text, durationSec, color, fps, audioIdx]
-   * file:   audio/{phase}/{phase}_{audioIdx}.wav
    */
   function getAudioIdx(phase, msg) {
     if (!msg || !msg.length) return -1;
@@ -61,32 +61,96 @@
     return undefined;
   }
 
+  function maxAudioIdx(phase) {
+    var list = MSG[phase] || [];
+    var max = -1;
+    for (var i = 0; i < list.length; i++) {
+      var idx = getAudioIdx(phase, list[i]);
+      if (idx > max) max = idx;
+    }
+    return max;
+  }
+
+  function preloadAudio() {
+    ['go', 'stop', 'finish'].forEach(function (phase) {
+      var max = maxAudioIdx(phase);
+      var counts = (MSG.audioCounts && MSG.audioCounts[phase]) || (max + 1);
+      var n = Math.max(max + 1, counts || 0);
+      audioPools[phase] = [];
+      for (var i = 0; i < n; i++) {
+        var a = new Audio('audio/' + phase + '/' + phase + '_' + i + '.wav');
+        a.preload = 'auto';
+        try { a.load(); } catch (e) {}
+        audioPools[phase][i] = a;
+      }
+    });
+    audioReady = true;
+  }
+
+  /** Call inside user gesture (submit click) so mobile browsers unlock playback */
+  function unlockAudio() {
+    ['go', 'stop', 'finish'].forEach(function (phase) {
+      (audioPools[phase] || []).forEach(function (a) {
+        if (!a) return;
+        try {
+          a.muted = true;
+          var p = a.play();
+          if (p && p.then) {
+            p.then(function () {
+              a.pause();
+              a.currentTime = 0;
+              a.muted = false;
+            }).catch(function () {
+              a.muted = false;
+            });
+          } else {
+            a.pause();
+            a.currentTime = 0;
+            a.muted = false;
+          }
+        } catch (e) {
+          try { a.muted = false; } catch (e2) {}
+        }
+      });
+    });
+  }
+
   function playVoice(phase, audioIdx) {
     if (audioIdx === undefined || audioIdx === null || audioIdx < 0) return;
-    var key = phase + ':' + audioIdx;
-    var path = 'audio/' + phase + '/' + phase + '_' + audioIdx + '.wav';
-
-    // pause any currently playing cached clips
-    Object.keys(audioCache).forEach(function (k) {
-      var el = audioCache[k];
-      try { el.pause(); el.currentTime = 0; } catch (e) {}
-    });
-
-    var a = audioCache[key];
+    var list = audioPools[phase] || [];
+    var a = list[audioIdx];
     if (!a) {
-      a = new Audio(path);
-      a.preload = 'auto';
-      audioCache[key] = a;
+      a = new Audio('audio/' + phase + '/' + phase + '_' + audioIdx + '.wav');
+      list[audioIdx] = a;
+      audioPools[phase] = list;
     }
-    a.currentTime = 0;
-    var p = a.play();
-    if (p && p.catch) p.catch(function () {});
+    // stop others in same phase first, then all phases briefly
+    ['go', 'stop', 'finish'].forEach(function (ph) {
+      (audioPools[ph] || []).forEach(function (el) {
+        if (!el) return;
+        try { el.pause(); el.currentTime = 0; } catch (e) {}
+      });
+    });
+    try {
+      a.muted = false;
+      a.currentTime = 0;
+      var p = a.play();
+      if (p && p.catch) {
+        p.catch(function (err) {
+          console.warn('playVoice failed', phase, audioIdx, err);
+        });
+      }
+    } catch (e) {
+      console.warn('playVoice error', e);
+    }
   }
 
   function stopAllAudio() {
-    Object.keys(audioCache).forEach(function (k) {
-      var el = audioCache[k];
-      try { el.pause(); el.currentTime = 0; } catch (e) {}
+    ['go', 'stop', 'finish'].forEach(function (ph) {
+      (audioPools[ph] || []).forEach(function (el) {
+        if (!el) return;
+        try { el.pause(); el.currentTime = 0; } catch (e) {}
+      });
     });
   }
 
@@ -100,18 +164,6 @@
     }
   }
 
-  function setPhaseUI(phaseKey, label) {
-    $('#phaseLabel').text(label || phaseKey);
-    $('#phaseDots .dot').removeClass('active done');
-    var order = ['warmup', 'mid', 'final', 'end'];
-    var idx = order.indexOf(phaseKey);
-    order.forEach(function (k, i) {
-      var $d = $('#phaseDots .dot[data-phase="' + k + '"]');
-      if (i < idx) $d.addClass('done');
-      if (i === idx) $d.addClass('active');
-    });
-  }
-
   function updateTimerUI() {
     if (!session || !session.running) return;
     var elapsed = (Date.now() - session.startMs) / 1000;
@@ -119,26 +171,6 @@
     $('#elapsed').text(fmt(elapsed));
     $('#remain').text(fmt(remain));
     $('#targetTime').text(fmt(session.targetSec));
-    var pct = Math.min(100, (elapsed / session.targetSec) * 100);
-    $('#sessionBar .bar').css('width', pct + '%');
-  }
-
-  function emergencyStop(reason) {
-    if (!session) return;
-    session.running = false;
-    window.__edgeTimerRunning = false;
-    clearInterval(window.flashInterval);
-    stopAllAudio();
-    try { if (noSleep) noSleep.disable(); } catch (e) {}
-    $('#progress .jerkbar .bar, #progress .cumbar .bar').css('width', '0%');
-    $('#message').html(
-      '<strong>已紧急停止</strong><br />' +
-      (reason || '你按下了紧急停止。') +
-      '<br /><br /><small>休息一下。需要时刷新页面重新开始。</small>'
-    );
-    $('#cooldownTip').show().text('冷却建议：至少休息 10–15 分钟，补充水分。');
-    setPhaseUI('end', '已停止');
-    $('#btnEmergency').prop('disabled', true);
   }
 
   function pickMessage(phase, modeKey, useFleshlight, lastPick, recentTags) {
@@ -225,11 +257,7 @@
     window.__edgeTimerRunning = true;
 
     $('#choose').hide();
-    $('#ageGate').hide();
     $('#gamewrapper').show();
-    $('#btnEmergency').prop('disabled', false).show();
-    $('#cooldownTip').hide();
-    setPhaseUI('warmup', '热身阶段');
 
     try { if (noSleep) noSleep.enable(); } catch (e) {}
 
@@ -241,8 +269,6 @@
       window.__edgeTimerRunning = false;
       $('#message').html(MSG.gameover.postcum);
       $mw.removeClass('cancel finish go stop');
-      setPhaseUI('end', '结束');
-      $('#cooldownTip').show().text('冷却建议：结束后休息，不要连续开下一局。');
       try { if (noSleep) noSleep.disable(); } catch (e) {}
     }
 
@@ -277,13 +303,9 @@
       if (progress > 0.75) {
         multiplier = multiplier / 4;
         $('#speed').html(MSG.phases.phase3);
-        setPhaseUI('final', '最终阶段');
       } else if (progress > 0.5) {
         multiplier = multiplier / 2;
         $('#speed').html(MSG.phases.phase2);
-        setPhaseUI('mid', '加速阶段');
-      } else {
-        setPhaseUI('warmup', '热身阶段');
       }
 
       var passType = nextPassType(session.pass, duration, targetSec, modeKey);
@@ -328,8 +350,6 @@
             MSG.gameover.nocum1 + '<br />' + MSG.gameover.nocum2 +
             '<br /><br /><small>' + MSG.gameover.nocum3 + '</small>'
           );
-          setPhaseUI('end', '边缘结束');
-          $('#cooldownTip').show().text('冷却建议：本轮未释放，注意休息与补水。');
           return;
         }
 
@@ -338,12 +358,10 @@
           showBg('finish');
           $mw.removeClass('go stop').addClass('finish');
           playVoice('finish', getAudioIdx('finish', randomMessage));
-          setPhaseUI('end', '允许释放');
           showProgressAndGoOn(randomMessage[1] * 1000, end, 'cumbar');
         } else {
           $mw.removeClass('go stop').addClass('cancel');
           playVoice('finish', getAudioIdx('finish', randomMessage));
-          setPhaseUI('end', '拒绝释放');
           showProgressAndGoOn(randomMessage[1] * 1000, function () {
             try { if (noSleep) noSleep.disable(); } catch (e) {}
             window.location.reload();
@@ -356,28 +374,11 @@
   }
 
   function bindUI() {
-    $('#btnAgeYes').on('click', function () {
-      try { localStorage.setItem('edge_age_ok', '1'); } catch (e) {}
-      $('#ageGate').hide();
-      $('#choose').show();
-    });
-    $('#btnAgeNo').on('click', function () {
-      $('#ageGate .age-body').html('<p>已取消。本站仅供成年人使用。</p>');
-    });
-
-    $('#btnEmergency').on('click', function () {
-      emergencyStop('紧急停止已触发。');
-    });
-
-    $(document).on('keydown', function (e) {
-      if (e.key === 'Escape' && session && session.running) {
-        emergencyStop('快捷键 Esc 触发紧急停止。');
-      }
-    });
-
     $('#submit').on('click', function (e) {
       e.preventDefault();
       e.stopPropagation();
+      if (!MSG) return;
+      unlockAudio();
       var modeKey = $('#choose select[name=mode]').val();
       var durationMin = parseInt($('#choose select[name=duration]').val(), 10);
       var cum = parseFloat($('#choose select[name=cum]').val());
@@ -395,17 +396,8 @@
   }
 
   function boot() {
-    var ageOk = false;
-    try { ageOk = localStorage.getItem('edge_age_ok') === '1'; } catch (e) {}
-    if (ageOk) {
-      $('#ageGate').hide();
-      $('#choose').show();
-    } else {
-      $('#ageGate').show();
-      $('#choose').hide();
-    }
     $('#gamewrapper').hide();
-    $('#btnEmergency').hide();
+    $('#choose').show();
 
     fetch('messages.json')
       .then(function (r) { return r.json(); })
@@ -413,20 +405,15 @@
         MSG = data;
         window.messages = data;
         window.images = data.images || { go: [], stop: [], finish: [] };
+        preloadAudio();
         bindUI();
-        $('#bootStatus').text('就绪 v' + (data.version || ''));
+        $('#bootStatus').text('就绪 v' + (data.version || '') + ' · 语音已预载');
       })
       .catch(function (err) {
         console.error(err);
         $('#bootStatus').text('文案加载失败，请刷新');
-        $('#message').text('无法加载 messages.json');
       });
   }
 
   $(boot);
-
-  window.EDGE = {
-    emergencyStop: emergencyStop,
-    getMessages: function () { return MSG; }
-  };
 })(window, jQuery);

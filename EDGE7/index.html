@@ -2,12 +2,44 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<meta name="theme-color" content="#0e0e12" />
-<title>EDGE-Infinity</title>
-<meta name="description" content="成人向边缘控制互动（18+）" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>请求主人恩准贱狗排精！——彻底的精奴调教</title>
+<meta name="description" content="服从主人的指令，边缘、憋精、耻辱自慰……只有主人才能决定你这根贱狗鸡巴是否可以射精。" />
 <link rel="stylesheet" href="minimize-css.css" />
-<link rel="stylesheet" href="game.css" />
+<style>
+#message { white-space: pre-line; word-break: break-word; line-height: 1.65; }
+#timer {
+  font-size: 18px;
+  font-weight: bold;
+  color: #ffcc00;
+  margin: 12px 0;
+  text-align: center;
+  cursor: help;
+  position: relative;
+  display: inline-block;
+  width: 100%;
+}
+#timerTip {
+  display: none;
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(100% + 6px);
+  background: #222;
+  color: #eee;
+  border: 1px solid #666;
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: normal;
+  white-space: nowrap;
+  z-index: 20;
+  box-shadow: 0 4px 12px rgba(0,0,0,.35);
+}
+#timer:hover #timerTip,
+#timer:focus-within #timerTip { display: block; }
+#bootStatus { text-align: center; color: #888; font-size: 12px; margin-top: 6px; }
+</style>
 <script src="nosleep.js"></script>
 <script src="minimize-js.js"></script>
 <script src="game.js" defer></script>
@@ -15,113 +47,100 @@
 <body>
 <div id="mainwrapper">
 
-  <div id="ageGate" role="dialog" aria-labelledby="ageTitle" aria-modal="true">
-    <h1 id="ageTitle">18+ 成人内容确认</h1>
-    <div class="age-body">
-      <p>本站包含明确的成人向性内容与控制类玩法，仅供年满 <strong>18 周岁</strong> 的用户使用。</p>
-      <p>请确认：你已成年，并自愿使用本工具。可随时按页面底部的<strong>紧急停止</strong>或键盘 <kbd>Esc</kbd> 中止。</p>
-    </div>
-    <div class="age-actions">
-      <button type="button" id="btnAgeYes">我已满 18 岁，进入</button>
-      <button type="button" id="btnAgeNo">未满 18 岁 / 离开</button>
-    </div>
+<div id="choose">
+<h2>请求主人恩准贱狗排精！</h2>
+<div class="instructions">
+<p><strong>贱狗注意：</strong>你正在请求主人彻底控制你的狗鸡巴、龟背、马眼、骚屁眼和前列腺。请诚实调整选项，严格服从每一条指令。</p>
+<ul>
+<li>深绿色时可以自慰，但绝不准射精。</li>
+<li>暗红色时必须立即停止所有动作，双手拿开。</li>
+<li>游戏会随机出现具体指令：摩擦龟背、刮马眼、插骚屁眼并勾前列腺、按压会阴等，带来强烈潮吹边缘感。</li>
+<li>亮绿色时才被允许排精。</li>
+<li>执行指令时动作要听话，耻辱感要足！</li>
+</ul>
+</div>
+<form class="form-horizontal" onsubmit="return false;">
+<div class="form-group">
+<label class="col-sm-4 control-label">告诉主人：贱狗需要被控制的时长</label>
+<div class="col-sm-8">
+<select name="duration" class="selectpicker">
+<option value="2">超级早泄废物（很短）</option>
+<option value="7">早泄废物</option>
+<option value="15" selected="selected">普通废物</option>
+<option value="30">合格贱狗</option>
+<option value="60">极品精奴贱狗</option>
+</select>
+</div>
+</div>
+<div class="form-group">
+<label class="col-sm-4 control-label">告诉主人：排精任务的难度</label>
+<div class="col-sm-8">
+<select name="mode" class="selectpicker">
+<option value="0">超级早泄废物</option>
+<option value="1">早泄废物</option>
+<option value="2" selected="selected">普通废物</option>
+<option value="3">合格贱狗</option>
+<option value="4">极品精奴贱狗</option>
+</select>
+</div>
+</div>
+<div class="form-group">
+<label class="col-sm-4 control-label">告诉主人：贱狗是否渴望排精？</label>
+<div class="col-sm-8">
+<select name="cum" class="selectpicker" data-width="auto">
+<option value="0" selected="selected">极品贱狗不被允许排精！</option>
+<option value="0.2">如果表现不错，可以被奖励排精</option>
+<option value="0.5">贱狗愿意服从主人任何指令</option>
+<option value="0.8">请主人允许贱狗排精！</option>
+<option value="0.95">贱狗愿意做任何下贱的事换取排精权利！</option>
+</select>
+</div>
+</div>
+<div class="form-group">
+<label class="col-sm-4 control-label">告诉主人：是否使用飞机杯？</label>
+<div class="col-sm-8">
+<select name="fleshlight" class="selectpicker" data-width="auto">
+<option value="0" selected="selected">否（纯手撸）</option>
+<option value="1">是（使用飞机杯）</option>
+</select>
+</div>
+</div>
+<div class="form-group">
+<div class="col-sm-4"></div>
+<div class="col-sm-8">
+<button type="submit" id="submit" class="btn btn-default btn-primary" style="margin-bottom:20px">开始调教任务</button>
+</div>
+</div>
+</form>
+<div id="bootStatus">加载中…</div>
+</div>
+
+<div id="gamewrapper" style="display:none">
+<div id="image"></div>
+<div id="flash" class="off" style="display:none"><span>自慰</span></div>
+<div id="message"></div>
+
+<div id="timer" tabindex="0" title="">
+  已用时间: <span id="elapsed">00:00</span>
+  <div id="timerTip">剩余约 <span id="remain">--:--</span> · 预估总长 <span id="targetTime">--:--</span></div>
+</div>
+
+<div id="progress">
+  <div class="jerkbar">
+    <div class="bar"></div>
+    <div class="text">边缘</div>
   </div>
-
-  <div id="choose" style="display:none">
-    <h2>EDGE-Infinity</h2>
-    <div class="instructions">
-      <p><strong>说明：</strong>选择参数后开始。绿色阶段可刺激但不可提前结束；红色阶段必须立刻停手；最终阶段才可能被允许。</p>
-      <ul>
-        <li>紧急停止：底部红钮或 <kbd>Esc</kbd></li>
-        <li>飞机杯选项会影响是否出现对应指令</li>
-        <li>难度越高，高强度 / 边缘类指令权重越大</li>
-      </ul>
-    </div>
-    <form class="form-horizontal" onsubmit="return false;">
-      <div class="form-group">
-        <label class="control-label">控制时长</label>
-        <select name="duration" class="selectpicker">
-          <option value="2">很短（约 2 分钟档）</option>
-          <option value="7">短（约 7 分钟档）</option>
-          <option value="15" selected>普通（约 15 分钟档）</option>
-          <option value="30">长（约 30 分钟档）</option>
-          <option value="60">很长（约 60 分钟档）</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label class="control-label">难度</label>
-        <select name="mode" class="selectpicker">
-          <option value="0">很轻松</option>
-          <option value="1">轻松</option>
-          <option value="2" selected>普通</option>
-          <option value="3">困难</option>
-          <option value="4">极难</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label class="control-label">最终释放倾向</label>
-        <select name="cum" class="selectpicker" data-width="auto">
-          <option value="0" selected>不允许释放</option>
-          <option value="0.2">较低概率</option>
-          <option value="0.5">中等</option>
-          <option value="0.8">较高</option>
-          <option value="0.95">很高</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label class="control-label">是否使用飞机杯</label>
-        <select name="fleshlight" class="selectpicker" data-width="auto">
-          <option value="0" selected>否（手）</option>
-          <option value="1">是</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <button type="submit" id="submit" class="btn btn-primary">开始</button>
-      </div>
-    </form>
-    <div id="bootStatus">加载中…</div>
+  <div class="cumbar">
+    <div class="separator"></div>
+    <div class="bar"></div>
+    <div class="text">射精！</div>
   </div>
+</div>
+<div id="cumSoon">
+  <div id="speed"></div>
+</div>
+</div>
 
-  <div id="gamewrapper" style="display:none">
-    <div id="image"></div>
-    <div id="flash" class="off" aria-hidden="true"><span>节奏</span></div>
-    <div id="message" role="status" aria-live="polite"></div>
-
-    <div id="timerPanel">
-      <div id="timerRow">
-        <div>已用 <span class="val" id="elapsed">00:00</span></div>
-        <div>剩余约 <span class="val" id="remain">--:--</span></div>
-        <div>预估总长 <span class="val" id="targetTime">--:--</span></div>
-      </div>
-      <div id="sessionBar" aria-label="整局进度"><div class="bar"></div></div>
-      <div id="phaseRow">
-        <span id="phaseLabel">热身阶段</span>
-        <div id="phaseDots" aria-hidden="true">
-          <span class="dot" data-phase="warmup"></span>
-          <span class="dot" data-phase="mid"></span>
-          <span class="dot" data-phase="final"></span>
-          <span class="dot" data-phase="end"></span>
-        </div>
-      </div>
-    </div>
-
-    <div id="progress">
-      <div class="jerkbar">
-        <div class="bar"></div>
-        <div class="text">当前指令</div>
-      </div>
-      <div class="cumbar">
-        <div class="separator"></div>
-        <div class="bar"></div>
-        <div class="text">最终阶段</div>
-      </div>
-    </div>
-
-    <div id="cumSoon"><div id="speed"></div></div>
-    <div id="cooldownTip" role="status"></div>
-  </div>
-
-  <button type="button" id="btnEmergency" style="display:none" aria-label="紧急停止">紧急停止 (Esc)</button>
 </div>
 </body>
 </html>
