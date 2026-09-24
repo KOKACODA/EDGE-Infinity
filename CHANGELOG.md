@@ -1,39 +1,39 @@
 # Changelog
 
-All notable changes to EDGE-Infinity are documented in this file.
+## [1.3.0] - 2026-09-24
+
+### Added
+- `messages.json` — all copy, tags, phase texts, `images.go/stop/finish` placeholders, audio counts.
+- `game.js` — session logic (random, timer, phases, emergency stop).
+- `game.css` — dark mobile-first UI.
+- **18+ age gate** (localStorage remember).
+- **Emergency stop** button + `Esc` key; stops audio, progress, noSleep.
+- **Cooldown tip** after stop / end.
+- Session progress bar with **elapsed / remaining / target** time.
+- **Phase markers**: 热身 → 加速 → 最终 → 结束.
+
+### Changed
+- Removed game logic from `minimize-js.js` (libs only: jQuery / Bootstrap / selectpicker).
+- Entry HTML rebuilt for structure + a11y (`aria-live` on messages).
+
+### Notes for media
+- Put image/video URLs into `messages.json` → `images.go` / `images.stop` / `images.finish` arrays.
+- Background switches via `showBg(phase)` when arrays are non-empty.
 
 ## [1.2.0] - 2026-09-24
 
 ### Fixed
-- **Timer bug**: elapsed time used to start counting from page load; now starts only when the session begins.
-- Timer display uses `MM:SS` and shows estimated total duration.
+- Timer started only after session begin; MM:SS display.
 
 ### Changed
-- Instruction selection is **weighted by difficulty** (mode): higher difficulty favors edge / prostate / intensity tags.
-- **Fleshlight option** now filters messages (fleshlight-tagged lines only appear when enabled).
-- Anti-repeat: avoids consecutive identical lines; recent tag diversity soft-penalty.
-- Go/Stop rhythm is no longer strict alternate-only; slight chaos + mode bias.
-- Session length variance scales with difficulty (harder → tighter around selected minutes).
-- Finish-phase voice playback when allowed / denied.
-
-### Added
-- Message tag map (`messageTags`) for option-aware random selection.
+- Weighted random by mode / fleshlight; anti-repeat.
 
 ## [1.1.0] - 2026-09-24
 
 ### Changed
-- Deploy target: Cloudflare Pages (`edge-infinity.pages.dev`).
-- Entry file: only `EDGE7/index.html` (from former index7).
-- Commit author bound to GitHub user **KOKACODA**.
-
-### Fixed
-- Audio preload counts matched real files (go=21, stop=11, finish=9).
-
-### Added
-- `VERSION` + `CHANGELOG.md`.
-- Caching `_headers`.
+- Cloudflare Pages deploy; single `index.html` entry.
 
 ## [1.0.0] - 2026-09-24
 
 ### Added
-- Initial import from upstream EDGE static site.
+- Initial static site import.
