@@ -1,5 +1,5 @@
 /**
- * EDGE-Infinity game logic (v1.3.0)
+ * EDGE-Infinity game logic (v1.4.0)
  * Messages & tags load from messages.json
  */
 (function (window, $) {
@@ -17,9 +17,8 @@
   try { noSleep = new NoSleep(); } catch (e) {}
 
   var MSG = null;
-  var audioGo = [];
-  var audioStop = [];
-  var audioFinish = [];
+  /** @type {Object.<string, HTMLAudioElement>} on-demand cache key = "go:3" */
+  var audioCache = {};
   var session = null;
 
   function fmt(sec) {
@@ -41,28 +40,53 @@
     return pool[pool.length - 1];
   }
 
-  function loadAudio(counts) {
-    audioGo = [];
-    audioStop = [];
-    audioFinish = [];
-    var i;
-    for (i = 0; i < (counts.go || 0); i++) audioGo.push(new Audio('audio/go/go_' + i + '.wav'));
-    for (i = 0; i < (counts.stop || 0); i++) audioStop.push(new Audio('audio/stop/stop_' + i + '.wav'));
-    for (i = 0; i < (counts.finish || 0); i++) audioFinish.push(new Audio('audio/finish/finish_' + i + '.wav'));
+  /* Message layout (approach B):
+   * go:     [text, durationSec, fps, audioIdx]
+   * stop:   [text, durationSec, audioIdx]
+   * finish: [text, durationSec, color, fps, audioIdx]
+   * file:   audio/{phase}/{phase}_{audioIdx}.wav
+   */
+  function getAudioIdx(phase, msg) {
+    if (!msg || !msg.length) return -1;
+    if (phase === 'go') return typeof msg[3] === 'number' ? msg[3] : -1;
+    if (phase === 'stop') return typeof msg[2] === 'number' ? msg[2] : -1;
+    if (phase === 'finish') return typeof msg[4] === 'number' ? msg[4] : -1;
+    return -1;
   }
 
-  function playVoice(type, index) {
-    var list = type === 'go' ? audioGo : type === 'stop' ? audioStop : type === 'finish' ? audioFinish : [];
-    if (index < 0 || index >= list.length) return;
-    list.forEach(function (a) { try { a.pause(); a.currentTime = 0; } catch (e) {} });
-    var a = list[index];
+  function getFps(phase, msg) {
+    if (!msg) return undefined;
+    if (phase === 'go') return msg[2];
+    if (phase === 'finish') return msg[3];
+    return undefined;
+  }
+
+  function playVoice(phase, audioIdx) {
+    if (audioIdx === undefined || audioIdx === null || audioIdx < 0) return;
+    var key = phase + ':' + audioIdx;
+    var path = 'audio/' + phase + '/' + phase + '_' + audioIdx + '.wav';
+
+    // pause any currently playing cached clips
+    Object.keys(audioCache).forEach(function (k) {
+      var el = audioCache[k];
+      try { el.pause(); el.currentTime = 0; } catch (e) {}
+    });
+
+    var a = audioCache[key];
+    if (!a) {
+      a = new Audio(path);
+      a.preload = 'auto';
+      audioCache[key] = a;
+    }
     a.currentTime = 0;
-    a.play().catch(function () {});
+    var p = a.play();
+    if (p && p.catch) p.catch(function () {});
   }
 
   function stopAllAudio() {
-    [audioGo, audioStop, audioFinish].forEach(function (list) {
-      list.forEach(function (a) { try { a.pause(); a.currentTime = 0; } catch (e) {} });
+    Object.keys(audioCache).forEach(function (k) {
+      var el = audioCache[k];
+      try { el.pause(); el.currentTime = 0; } catch (e) {}
     });
   }
 
@@ -283,8 +307,8 @@
         $mw.removeClass('go stop finish cancel').addClass(passType);
         showBg(passType);
         $('#message').html(picked.msg[0]);
-        playVoice(passType, picked.index);
-        updateFlash(picked.msg[2]);
+        playVoice(passType, getAudioIdx(passType, picked.msg));
+        updateFlash(getFps(passType, picked.msg));
         showProgressAndGoOn(picked.msg[1] * 1000 * multiplier, goOn, 'jerkbar');
       } else {
         var finishPick = pickMessage('finish', modeKey, useFleshlight, session.lastPick, session.recentTags);
@@ -313,12 +337,12 @@
         if (randomMessage[2] !== 'red') {
           showBg('finish');
           $mw.removeClass('go stop').addClass('finish');
-          playVoice('finish', finishPick.index);
+          playVoice('finish', getAudioIdx('finish', randomMessage));
           setPhaseUI('end', '允许释放');
           showProgressAndGoOn(randomMessage[1] * 1000, end, 'cumbar');
         } else {
           $mw.removeClass('go stop').addClass('cancel');
-          playVoice('finish', finishPick.index);
+          playVoice('finish', getAudioIdx('finish', randomMessage));
           setPhaseUI('end', '拒绝释放');
           showProgressAndGoOn(randomMessage[1] * 1000, function () {
             try { if (noSleep) noSleep.disable(); } catch (e) {}
@@ -389,7 +413,6 @@
         MSG = data;
         window.messages = data;
         window.images = data.images || { go: [], stop: [], finish: [] };
-        loadAudio(data.audioCounts || { go: 21, stop: 11, finish: 9 });
         bindUI();
         $('#bootStatus').text('就绪 v' + (data.version || ''));
       })

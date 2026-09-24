@@ -16,6 +16,16 @@ Adult 18+ static interactive session tool on **Cloudflare Pages**.
 | `EDGE7/minimize-js.js` | jQuery + Bootstrap only |
 | `EDGE7/audio/` | Voice clips aligned by index |
 
+## Audio ↔ text (做法 B)
+
+Last number on each line is the wav index (not the array position):
+
+- go: `[text, seconds, fps, audioIdx]` → `audio/go/go_{audioIdx}.wav`
+- stop: `[text, seconds, audioIdx]` → `audio/stop/stop_{audioIdx}.wav`
+- finish: `[text, seconds, color, fps, audioIdx]` → `audio/finish/finish_{audioIdx}.wav`
+
+Audio is loaded on demand when a line is shown.
+
 ## Add background media later
 
 Edit `messages.json`:
