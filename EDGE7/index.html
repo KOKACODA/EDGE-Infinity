@@ -247,6 +247,7 @@
 </style>
 <!-- SheetJS CE: browser-side xlsx parse (no server upload) -->
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="nosleep.js"></script>
 <script src="minimize-js.js"></script>
 <script src="game.js" defer></script>
@@ -341,19 +342,31 @@
     <h2>我有主人</h2>
     <button type="button" id="btnBackHomePack" class="btn-back">← 返回选项</button>
   </div>
-  <p id="voiceLibHint">导入 / 导出本局内容表。解析只在浏览器内完成，<strong>不会上传到服务器</strong>；刷新页面后恢复网站默认。</p>
+  <p id="voiceLibHint">本地<strong>资料包</strong>（zip）：含文案 + 语音/图片/视频文件夹。仅在浏览器内解压，<strong>不上传服务器</strong>；刷新后恢复默认。</p>
   <div id="packBar">
-    <div><strong>1. 模板</strong></div>
+    <div><strong>资料包目录结构</strong></div>
+    <pre id="packStructure" style="font-size:12px;line-height:1.45;background:rgba(0,0,0,.35);padding:10px;border-radius:6px;overflow:auto;color:#ddd;">EDGE-Pack/
+  README.txt
+  messages.json          （优先）
+  EDGE-内容.xlsx         （可选，无 json 时用）
+  audio/go/go_0.wav …
+  audio/stop/stop_0.wav …
+  audio/finish/finish_0.wav …
+  images/go|stop|finish/
+  video/go|stop|finish/  （预留）</pre>
+    <div style="margin-top:12px"><strong>1. 下载空模板包</strong></div>
     <div class="pack-row">
-      <a id="btnDlTemplate" href="templates/EDGE-内容模板.xlsx" download>下载 Excel 模板</a>
+      <a id="btnDlPackZip" href="templates/EDGE-Pack.zip" download>下载 EDGE-Pack.zip</a>
+      <a id="btnDlTemplate" href="templates/EDGE-内容模板.xlsx" download>仅下载 Excel</a>
     </div>
-    <div style="margin-top:12px"><strong>2. 导入（单次游玩）</strong></div>
+    <div style="margin-top:12px"><strong>2. 导入资料包（单次游玩）</strong></div>
     <div class="pack-row">
-      <input type="file" id="packFile" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
+      <input type="file" id="packFile" accept=".zip,application/zip,.xlsx,.xls" />
     </div>
     <div style="margin-top:12px"><strong>3. 导出 / 恢复</strong></div>
     <div class="pack-row">
-      <button type="button" id="btnPackExport" class="btn btn-default" style="padding:6px 12px;font-size:13px">导出当前内容为 Excel</button>
+      <button type="button" id="btnPackExport" class="btn btn-default" style="padding:6px 12px;font-size:13px">导出当前为 zip 资料包</button>
+      <button type="button" id="btnPackExportXlsx" class="btn btn-default" style="padding:6px 12px;font-size:13px">仅导出 Excel</button>
       <button type="button" id="btnPackReset" class="btn btn-default" style="padding:6px 12px;font-size:13px">恢复默认内容</button>
     </div>
     <div id="packStatus" class="def">当前：网站默认内容</div>

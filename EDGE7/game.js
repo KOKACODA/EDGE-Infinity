@@ -1,5 +1,5 @@
 /**
- * EDGE-Infinity game logic (v1.9.1)
+ * EDGE-Infinity game logic (v1.10.0)
  */
 (function (window, $) {
   'use strict';
@@ -17,6 +17,9 @@
 
   var MSG = null;
   var audioPools = { go: [], stop: [], finish: [] };
+  /** @type {Object.<string, string>} key phase:idx -> blob/object URL from local pack */
+  var packAudioUrls = {};
+  var packObjectUrls = []; // for revoke on reset
   var session = null;
   var unlocked = false;
 
@@ -69,12 +72,19 @@
   function ensureAudio(phase, audioIdx) {
     if (audioIdx < 0) return null;
     if (!audioPools[phase]) audioPools[phase] = [];
+    var packKey = phase + ':' + audioIdx;
     var a = audioPools[phase][audioIdx];
+    var src = packAudioUrls[packKey]
+      ? packAudioUrls[packKey]
+      : ('audio/' + phase + '/' + phase + '_' + audioIdx + '.wav');
     if (!a) {
-      a = new Audio('audio/' + phase + '/' + phase + '_' + audioIdx + '.wav');
+      a = new Audio(src);
       a.preload = 'auto';
       try { a.load(); } catch (e) {}
       audioPools[phase][audioIdx] = a;
+    } else if (packAudioUrls[packKey] && a.src.indexOf(packAudioUrls[packKey]) < 0) {
+      a.src = packAudioUrls[packKey];
+      try { a.load(); } catch (e) {}
     }
     return a;
   }
@@ -119,6 +129,16 @@
     });
     $('#voiceLibBody .vl-play').removeClass('playing');
   }
+
+  function clearPackMedia() {
+    packObjectUrls.forEach(function (u) {
+      try { URL.revokeObjectURL(u); } catch (e) {}
+    });
+    packObjectUrls = [];
+    packAudioUrls = {};
+    audioPools = { go: [], stop: [], finish: [] };
+  }
+
 
   function playVoice(phase, audioIdx) {
     if (audioIdx === undefined || audioIdx === null || audioIdx < 0) return;
@@ -326,6 +346,7 @@
 
   function resetToDefault() {
     if (!defaultMSG) return;
+    clearPackMedia();
     applyMessages(JSON.parse(JSON.stringify(defaultMSG)), '');
     $('#packStatus').removeClass('err').addClass('def').text('当前：网站默认内容');
     $('#packFile').val('');
@@ -333,6 +354,17 @@
 
   function handlePackFile(file) {
     if (!file) return;
+    var name = (file.name || '').toLowerCase();
+    if (name.endsWith('.zip')) {
+      loadPackZip(file);
+    } else if (name.endsWith('.xlsx') || name.endsWith('.xls')) {
+      loadPackXlsx(file);
+    } else {
+      $('#packStatus').addClass('err').text('请选择 .zip 资料包或 .xlsx 表格');
+    }
+  }
+
+  function loadPackXlsx(file) {
     if (typeof XLSX === 'undefined') {
       $('#packStatus').addClass('err').text('表格库未加载，请检查网络后刷新');
       return;
@@ -346,19 +378,121 @@
           $('#packStatus').removeClass('def').addClass('err').text('加载失败：' + result.errors.join('；'));
           return;
         }
-        applyMessages(result.data, '已加载：' + file.name + '（仅本局，不上传）');
+        clearPackMedia();
+        applyMessages(result.data, '已加载表格：' + file.name + '（仅本局；语音仍用网站默认，除非再导入含 audio 的 zip）');
         if (result.warnings && result.warnings.length) {
           $('#packStatus').append(' · ' + result.warnings.join('；'));
         }
       } catch (err) {
         console.error(err);
-        $('#packStatus').removeClass('def').addClass('err').text('无法解析文件：' + (err.message || err));
+        $('#packStatus').removeClass('def').addClass('err').text('无法解析表格：' + (err.message || err));
       }
     };
     reader.readAsArrayBuffer(file);
   }
 
-    function buildVoiceLibrary() {
+  function normalizeZipPath(path) {
+    return path.replace(/\\/g, '/').replace(/^\/+/, '');
+  }
+
+  function loadPackZip(file) {
+    if (typeof JSZip === 'undefined') {
+      $('#packStatus').addClass('err').text('JSZip 未加载，请检查网络后刷新');
+      return;
+    }
+    $('#packStatus').removeClass('err').text('正在解压资料包…');
+    JSZip.loadAsync(file).then(function (zip) {
+      clearPackMedia();
+      var files = {};
+      zip.forEach(function (relPath, entry) {
+        if (entry.dir) return;
+        files[normalizeZipPath(relPath)] = entry;
+      });
+      var keys = Object.keys(files);
+      var prefix = '';
+      if (keys.length) {
+        var parts0 = keys[0].split('/');
+        if (parts0.length > 1) {
+          var maybe = parts0[0] + '/';
+          var share = keys.filter(function (k) { return k.indexOf(maybe) === 0; }).length;
+          if (share >= keys.length * 0.8) prefix = maybe;
+        }
+      }
+      function relOf(k) {
+        return prefix ? k.slice(prefix.length) : k;
+      }
+
+      var jsonEntry = null;
+      var xlsxEntry = null;
+      keys.forEach(function (k) {
+        var low = relOf(k).toLowerCase();
+        if (low === 'messages.json') jsonEntry = files[k];
+        if (low.endsWith('.xlsx')) {
+          if (!xlsxEntry || low.indexOf('content') >= 0 || low.indexOf('内容') >= 0) xlsxEntry = files[k];
+        }
+      });
+
+      var audioJobs = [];
+      keys.forEach(function (k) {
+        var low = relOf(k).toLowerCase();
+        var m = low.match(/^audio\/(go|stop|finish)\/(go|stop|finish)_(\d+)\.(wav|mp3|ogg)$/);
+        if (m && m[1] === m[2]) {
+          audioJobs.push(files[k].async('blob').then(function (blob) {
+            var url = URL.createObjectURL(blob);
+            packObjectUrls.push(url);
+            packAudioUrls[m[1] + ':' + m[3]] = url;
+          }));
+        }
+      });
+
+      return Promise.all(audioJobs).then(function () {
+        if (jsonEntry) {
+          return jsonEntry.async('string').then(function (s) {
+            return { data: JSON.parse(s), warnings: [] };
+          });
+        }
+        if (xlsxEntry && typeof XLSX !== 'undefined') {
+          return xlsxEntry.async('arraybuffer').then(function (buf) {
+            var wb = XLSX.read(buf, { type: 'array' });
+            var result = messagesFromWorkbook(wb);
+            if (!result.ok) throw new Error(result.errors.join('；'));
+            return { data: result.data, warnings: result.warnings || [] };
+          });
+        }
+        throw new Error('资料包内未找到 messages.json 或 .xlsx');
+      }).then(function (parsed) {
+        var data = parsed.data;
+        data.images = { go: [], stop: [], finish: [] };
+        var imgJobs = [];
+        keys.forEach(function (k) {
+          var low = relOf(k).toLowerCase();
+          var im = low.match(/^images\/(go|stop|finish)\/.+\.(webp|jpg|jpeg|png|gif)$/);
+          if (im) {
+            imgJobs.push(files[k].async('blob').then(function (blob) {
+              var url = URL.createObjectURL(blob);
+              packObjectUrls.push(url);
+              data.images[im[1]].push(url);
+            }));
+          }
+        });
+        return Promise.all(imgJobs).then(function () {
+          return { data: data, warnings: parsed.warnings };
+        });
+      });
+    }).then(function (ctx) {
+      var nAudio = Object.keys(packAudioUrls).length;
+      audioPools = { go: [], stop: [], finish: [] };
+      applyMessages(ctx.data, '已加载资料包：' + file.name + '（包内语音 ' + nAudio + ' 条，仅本局）');
+      if (ctx.warnings && ctx.warnings.length) {
+        $('#packStatus').append(' · ' + ctx.warnings.join('；'));
+      }
+    }).catch(function (err) {
+      console.error(err);
+      $('#packStatus').removeClass('def').addClass('err').text('资料包失败：' + (err.message || err));
+    });
+  }
+
+  function buildVoiceLibrary() {
     var $body = $('#voiceLibBody');
     $body.empty();
     function section(title, phase, list) {
@@ -464,7 +598,86 @@
     $('#packStatus').removeClass('err').text('已导出当前内容（浏览器下载）');
   }
 
-  function applyScale(scale) {
+  
+  function packReadmeText() {
+    return [
+      'EDGE-Infinity 本地资料包',
+      '目录：messages.json + audio/{go,stop,finish}/ + images/ + video/',
+      '语音命名：go_0.wav 对应编号 0；导入网站「我有主人」使用。',
+      'green=允许 red=不允许'
+    ].join('\n');
+  }
+
+  function exportPackZip() {
+    if (typeof JSZip === 'undefined' || !MSG) {
+      $('#packStatus').addClass('err').text('无法导出 zip：库或内容未就绪');
+      return;
+    }
+    var zip = new JSZip();
+    zip.file('README.txt', packReadmeText());
+    zip.file('messages.json', JSON.stringify(MSG, null, 2));
+    // folder placeholders
+    ['go', 'stop', 'finish'].forEach(function (ph) {
+      zip.folder('audio/' + ph);
+      zip.folder('images/' + ph);
+      zip.folder('video/' + ph);
+    });
+    // include pack audio blobs if any
+    Object.keys(packAudioUrls).forEach(function (key) {
+      var parts = key.split(':');
+      var phase = parts[0];
+      var idx = parts[1];
+      var url = packAudioUrls[key];
+      // fetch blob from object url sync not possible — use async
+    });
+    // Also try write xlsx into zip if SheetJS available
+    var finish = function () {
+      zip.generateAsync({ type: 'blob' }).then(function (blob) {
+        var a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'EDGE-Pack-导出.zip';
+        a.click();
+        $('#packStatus').removeClass('err').text('已导出 zip 资料包（含 messages.json 与文件夹结构；语音请自行放入 audio/）');
+      });
+    };
+    if (typeof XLSX !== 'undefined') {
+      try {
+        var wb = XLSX.utils.book_new();
+        function aoa_sheet(name, header, rows) {
+          XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([header].concat(rows)), name);
+        }
+        aoa_sheet('开场', ['编号audioIdx', '文案', '秒数', 'fps', '图片路径', '备注'],
+          (MSG.first || []).map(function (r) { return [r[3], r[0], r[1], r[2], '', '']; }));
+        aoa_sheet('go', ['编号audioIdx', '文案', '秒数', 'fps', '标签tags', '图片路径', '备注'],
+          (MSG.go || []).map(function (r, i) {
+            var tags = (MSG.tags && MSG.tags.go && MSG.tags.go[i]) ? MSG.tags.go[i].join(',') : '';
+            return [r[3], r[0], r[1], r[2], tags, '', ''];
+          }));
+        aoa_sheet('stop', ['编号audioIdx', '文案', '秒数', '标签tags', '图片路径', '备注'],
+          (MSG.stop || []).map(function (r, i) {
+            var tags = (MSG.tags && MSG.tags.stop && MSG.tags.stop[i]) ? MSG.tags.stop[i].join(',') : '';
+            return [r[2], r[0], r[1], tags, '', ''];
+          }));
+        aoa_sheet('finish', ['编号audioIdx', '文案', '秒数', '颜色green或red', 'fps', '标签tags', '图片路径', '备注'],
+          (MSG.finish || []).map(function (r, i) {
+            var tags = (MSG.tags && MSG.tags.finish && MSG.tags.finish[i]) ? MSG.tags.finish[i].join(',') : '';
+            return [r[4], r[0], r[1], r[2], r[3], tags, '', ''];
+          }));
+        var out = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+        zip.file('EDGE-内容.xlsx', out);
+      } catch (e) { console.warn(e); }
+    }
+    // async pull pack audio into zip
+    var mediaJobs = Object.keys(packAudioUrls).map(function (key) {
+      var parts = key.split(':');
+      return fetch(packAudioUrls[key]).then(function (r) { return r.blob(); }).then(function (blob) {
+        zip.file('audio/' + parts[0] + '/' + parts[0] + '_' + parts[1] + '.wav', blob);
+      }).catch(function () {});
+    });
+    Promise.all(mediaJobs).then(finish).catch(finish);
+  }
+
+function applyScale(scale) {
     scale = Math.max(0.8, Math.min(1.6, scale));
     document.documentElement.style.setProperty('--ui-scale', String(scale));
     $('#scaleValue').text(Math.round(scale * 100) + '%');
@@ -723,6 +936,9 @@
       showHome();
     });
     $('#btnPackExport').on('click', function () {
+      exportPackZip();
+    });
+    $('#btnPackExportXlsx').on('click', function () {
       exportMessagesXlsx();
     });
 
