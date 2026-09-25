@@ -1,5 +1,5 @@
 /**
- * EDGE-Infinity game logic (v1.7.0)
+ * EDGE-Infinity game logic (v1.7.1)
  */
 (function (window, $) {
   'use strict';
@@ -397,38 +397,44 @@
         updateFlash(getFps(passType, picked.msg));
         showProgressAndGoOn(picked.msg[1] * 1000 * multiplier, goOn, 'jerkbar');
       } else {
+        /* ===== 最终阶段 Finish =====
+         * cumFactor === 0：只从「拒绝/红色」类 finish 里抽，仍播语音
+         * 否则按 cumFactor 概率允许；未允许时强制 finish[0]（拒绝稿）
+         */
         var finishPick = pickMessage('finish', modeKey, useFleshlight, session.lastPick, session.recentTags);
         var randomMessage = finishPick.msg;
 
-        if (Math.random() >= cumFactor) {
-          randomMessage = MSG.finish[0];
-          finishPick.index = 0;
-        }
-
         if (cumFactor === 0) {
-          $mw.removeClass('go stop finish');
-          session.running = false;
-          window.__edgeTimerRunning = false;
-          try { if (noSleep) noSleep.disable(); } catch (e) {}
-          $('#message').html(
-            MSG.gameover.nocum1 + '<br />' + MSG.gameover.nocum2 +
-            '<br /><br /><small>' + MSG.gameover.nocum3 + '</small>'
-          );
-          return;
+          var denyPool = [];
+          for (var di = 0; di < (MSG.finish || []).length; di++) {
+            if (MSG.finish[di][2] === 'red') denyPool.push(MSG.finish[di]);
+          }
+          if (!denyPool.length) denyPool = [MSG.finish[0]];
+          randomMessage = denyPool[Math.floor(Math.random() * denyPool.length)];
+        } else if (Math.random() >= cumFactor) {
+          randomMessage = MSG.finish[0];
         }
 
         $('#message').html(randomMessage[0]);
+        playVoice('finish', getAudioIdx('finish', randomMessage));
+
         if (randomMessage[2] !== 'red') {
+          // 允许释放
           showBg('finish');
           $mw.removeClass('go stop').addClass('finish');
-          playVoice('finish', getAudioIdx('finish', randomMessage));
           showProgressAndGoOn(randomMessage[1] * 1000, end, 'cumbar');
         } else {
+          // 拒绝释放：播完拒绝语音与进度后，再显示结束说明（可选）
           $mw.removeClass('go stop').addClass('cancel');
-          playVoice('finish', getAudioIdx('finish', randomMessage));
           showProgressAndGoOn(randomMessage[1] * 1000, function () {
+            session.running = false;
+            window.__edgeTimerRunning = false;
             try { if (noSleep) noSleep.disable(); } catch (e) {}
-            window.location.reload();
+            $('#message').html(
+              randomMessage[0] + '<br /><br />' +
+              MSG.gameover.nocum1 + '<br />' + MSG.gameover.nocum2 +
+              '<br /><br /><small>' + MSG.gameover.nocum3 + '</small>'
+            );
           }, 'jerkbar');
         }
       }

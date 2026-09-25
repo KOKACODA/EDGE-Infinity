@@ -1,16 +1,19 @@
 # Changelog
 
+## [1.7.1] - 2026-09-25
+
+### Fixed
+- **Finish phase when cum=0**: previously skipped `finish` lines and voice, only showed `gameover.nocum*`.
+  Now picks from **red (deny) finish** messages, plays `finish_{audioIdx}.wav`, then appends gameover notes.
+- Allow path still uses green finish lines + voice.
+
+### Docs
+- Added `DOCS-结构说明.md` (Chinese structure guide for manual edits, images/video formats).
+
 ## [1.7.0] - 2026-09-24
 
-### Changed
-- **主人留音** button placed beside the main title; opens a **separate page** with table layout (编号 / 语句 / 试听).
-- Larger message font and taller centered progress bars.
-- **UI scale control** (bottom-right − / +), range 80%–160%, remembered in localStorage.
+- 主人留音 separate table page; UI scale; larger type/progress.
 
-## [1.6.0] - 2026-09-24
-
-- Restored original copy; first-line voice; voice library preview.
-
-## [1.5.0] – [1.0.0]
+## [1.6.0] – [1.0.0]
 
 See git history.
