@@ -1,5 +1,5 @@
 /**
- * EDGE-Infinity game logic (v1.7.1)
+ * EDGE-Infinity game logic (v1.8.0)
  */
 (function (window, $) {
   'use strict';
@@ -398,43 +398,55 @@
         showProgressAndGoOn(picked.msg[1] * 1000 * multiplier, goOn, 'jerkbar');
       } else {
         /* ===== 最终阶段 Finish =====
-         * cumFactor === 0：只从「拒绝/红色」类 finish 里抽，仍播语音
-         * 否则按 cumFactor 概率允许；未允许时强制 finish[0]（拒绝稿）
+         * 颜色规则（与现有文案一致）：
+         *   green = 允许释放
+         *   red   = 不允许释放
+         * cumFactor === 0（极品…不被允许）：固定只走 red 池，随机优先
+         * 其他：以 cumFactor 为「允许」概率，再在对应颜色池内随机
+         * 不再拼接 gameover.nocum1/2/3
          */
-        var finishPick = pickMessage('finish', modeKey, useFleshlight, session.lastPick, session.recentTags);
-        var randomMessage = finishPick.msg;
-
-        if (cumFactor === 0) {
-          var denyPool = [];
-          for (var di = 0; di < (MSG.finish || []).length; di++) {
-            if (MSG.finish[di][2] === 'red') denyPool.push(MSG.finish[di]);
+        function finishPool(color) {
+          var pool = [];
+          for (var i = 0; i < (MSG.finish || []).length; i++) {
+            if (MSG.finish[i][2] === color) pool.push(MSG.finish[i]);
           }
-          if (!denyPool.length) denyPool = [MSG.finish[0]];
-          randomMessage = denyPool[Math.floor(Math.random() * denyPool.length)];
-        } else if (Math.random() >= cumFactor) {
-          randomMessage = MSG.finish[0];
+          return pool;
         }
+        function pickFromPool(pool, fallbackColor) {
+          if (pool && pool.length) {
+            return pool[Math.floor(Math.random() * pool.length)];
+          }
+          var fb = finishPool(fallbackColor);
+          if (fb.length) return fb[Math.floor(Math.random() * fb.length)];
+          return (MSG.finish && MSG.finish[0]) || ['结束', 10, 'red', 1, 0];
+        }
+
+        var allow = false;
+        if (cumFactor === 0) {
+          allow = false;
+        } else {
+          // 随机优先：每次独立掷骰；cum 越大越容易允许
+          allow = Math.random() < cumFactor;
+        }
+
+        var randomMessage = allow
+          ? pickFromPool(finishPool('green'), 'green')
+          : pickFromPool(finishPool('red'), 'red');
 
         $('#message').html(randomMessage[0]);
         playVoice('finish', getAudioIdx('finish', randomMessage));
 
-        if (randomMessage[2] !== 'red') {
-          // 允许释放
+        if (randomMessage[2] === 'green') {
           showBg('finish');
-          $mw.removeClass('go stop').addClass('finish');
+          $mw.removeClass('go stop cancel').addClass('finish');
           showProgressAndGoOn(randomMessage[1] * 1000, end, 'cumbar');
         } else {
-          // 拒绝释放：播完拒绝语音与进度后，再显示结束说明（可选）
-          $mw.removeClass('go stop').addClass('cancel');
+          // red = 不允许：只显示该 finish 句 + 语音，结束后停住（不 reload、不拼 nocum）
+          $mw.removeClass('go stop finish').addClass('cancel');
           showProgressAndGoOn(randomMessage[1] * 1000, function () {
             session.running = false;
             window.__edgeTimerRunning = false;
             try { if (noSleep) noSleep.disable(); } catch (e) {}
-            $('#message').html(
-              randomMessage[0] + '<br /><br />' +
-              MSG.gameover.nocum1 + '<br />' + MSG.gameover.nocum2 +
-              '<br /><br /><small>' + MSG.gameover.nocum3 + '</small>'
-            );
           }, 'jerkbar');
         }
       }

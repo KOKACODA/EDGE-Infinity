@@ -1,248 +1,154 @@
 # EDGE-Infinity 应用结构说明（手动改代码用）
 
-版本对应：`1.7.1` 起  
+版本对应：`1.8.0`  
 线上：https://edge-infinity.pages.dev  
-源码目录：仓库根目录下的 **`EDGE7/`**（Cloudflare Pages 部署的就是这一层）
+源码网站根目录：**`EDGE7/`**
 
 ---
 
-## 1. 目录长什么样
+## 1. 目录结构
 
 ```
 EDGE-Infinity/
-├── VERSION                 # 版本号纯文本
-├── CHANGELOG.md            # 更新日志
+├── VERSION
+├── CHANGELOG.md
 ├── README.md
-├── DOCS-结构说明.md         # 本文件
-├── wrangler.toml
-└── EDGE7/                  # ★ 网站根目录（改这里）
-    ├── index.html          # 页面结构 + 内联样式
-    ├── game.js             # 全部游戏逻辑
-    ├── messages.json       # 全部文案、编号、标签
-    ├── minimize-js.js      # jQuery / Bootstrap（一般不用动）
-    ├── minimize-css.css    # 原版样式（一般不用动）
-    ├── nosleep.js          # 防息屏
-    ├── _headers            # CDN 缓存头
-    ├── game.css            # 旧暗色样式，当前未引用，可忽略
-    └── audio/              # 语音（按阶段分子目录）
-        ├── go/go_0.wav … go_20.wav
-        ├── stop/stop_0.wav … stop_10.wav
-        └── finish/finish_0.wav … finish_8.wav
+├── DOCS-结构说明.md          ← 本文件
+└── EDGE7/                   ← 部署根目录
+    ├── index.html           # 结构 + 样式（勿擅自改风格除非需求要求）
+    ├── game.js              # 游戏逻辑
+    ├── messages.json        # 文案 / 编号 / 标签 / 图片列表
+    ├── minimize-js.js       # jQuery 等库（少动）
+    ├── minimize-css.css
+    ├── nosleep.js
+    ├── _headers
+    ├── audio/
+    │   ├── go/go_0.wav …
+    │   ├── stop/stop_0.wav …
+    │   └── finish/finish_0.wav …
+    ├── images/              # 图片占位（按阶段）
+    │   ├── go/
+    │   ├── stop/
+    │   └── finish/
+    └── video/               # 视频占位（按阶段，逻辑尚未接线）
+        ├── go/
+        ├── stop/
+        └── finish/
 ```
-
-**以后若加图片，建议同样建：**
-
-```
-EDGE7/images/
-  go/
-  stop/
-  finish/
-```
-
-视频同理可用 `EDGE7/video/`（见第 6 节）。
 
 ---
 
-## 2. 三个页面（都在同一个 index.html）
+## 2. 三个界面
 
-| 界面 | DOM | 何时出现 |
-|------|-----|----------|
-| 选项主页 | `#choose` | 打开网站默认 |
-| 主人留音 | `#voiceLibPage` | 点标题旁「主人留音」 |
-| 游戏进行 | `#gamewrapper` | 点「开始调教任务」 |
+| 界面 | 元素 | 触发 |
+|------|------|------|
+| 选项主页 | `#choose` | 默认 |
+| 主人留音 | `#voiceLibPage` | 标题旁按钮 |
+| 游戏中 | `#gamewrapper` | 开始调教任务 |
 
-逻辑切换在 `game.js` 的 `showHome()` / `showVoiceLib()` / `startSession()`。
-
-右下角缩放：`#scaleControl`，用 CSS 变量 `--ui-scale`，记在 `localStorage.edge_ui_scale`。
+缩放：右下角，不改变配色风格，只调 `--ui-scale`。
 
 ---
 
-## 3. 文案文件 `messages.json`（改话术主要改这里）
-
-### 3.1 顶层字段
-
-| 字段 | 含义 |
-|------|------|
-| `version` | 文案版本，界面会显示 |
-| `phases.phase2` / `phase3` | 半程、冲刺阶段提示 |
-| `gameover.*` | 结束后的补充说明 |
-| `first` / `go` / `stop` / `finish` | 各阶段语句数组 |
-| `tags` | 与 go/stop/finish **下标对齐**的标签（影响随机权重） |
-| `images` | `{ go:[], stop:[], finish:[] }` 背景图 URL 列表（可写路径） |
-| `audioCounts` | 预载数量提示 |
-
-### 3.2 每条语句的数组格式（做法 B）
-
-**必须从 0 开始的数字编号**，最后一项是语音编号 `audioIdx`：
+## 3. `messages.json` 语句格式
 
 ```text
-go:     [ "文案HTML", 持续秒数, 节奏fps, audioIdx ]
-stop:   [ "文案HTML", 持续秒数, audioIdx ]
-finish: [ "文案HTML", 持续秒数, "red"|"green", fps, audioIdx ]
-first:  [ "文案HTML", 持续秒数, fps, audioIdx ]   ← audioIdx 实际播 go_{n}.wav
+go:     [ "文案", 秒数, fps, audioIdx ]
+stop:   [ "文案", 秒数, audioIdx ]
+finish: [ "文案", 秒数, "green"|"red", fps, audioIdx ]
+first:  [ "文案", 秒数, fps, audioIdx ]  → 语音实际播 go_{audioIdx}.wav
 ```
 
-- `finish` 里 **`"red"` = 拒绝释放**，`"green"` = 允许释放  
-- 语音文件路径固定为：
+语音路径：`audio/{阶段}/{阶段}_{audioIdx}.wav`（编号从 **0** 起）。
 
-```text
-audio/{阶段}/{阶段}_{audioIdx}.wav
-例：audio/go/go_3.wav
-    audio/finish/finish_0.wav
-```
+### Finish 颜色含义（1.8.0）
 
-- **数组顺序可以乱，编号才决定播哪条语音。**  
-- 新增一句：文案写进 json，语音文件用下一个空编号（如已有 0–20，新文件用 `go_21.wav`，json 最后写 `21`）。
+| 字段值 | 含义 | 界面大致表现 |
+|--------|------|----------------|
+| **`green`** | **允许**释放 | 走 cum 进度条，可进入结束后的 postcum 提示 |
+| **`red`** | **不允许**释放 | 取消态，播完该句语音与进度后结束，**不再**追加 nocum 固定三句 |
 
-### 3.3 标签 `tags`（可选但建议同步）
+> 说明：若有文档曾写反颜色，以本表与现有文案为准（拒绝稿用 red，允许稿用 green）。
 
-`tags.go[i]` 对应 `go` 数组第 i 条（**数组下标**，不是 audioIdx）。  
-常用：`base` / `fast` / `edge` / `prostate` / `fleshlight` / `humiliate` / `pain` …
+### 与首页「是否渴望排精」的关系
 
-- 未勾选飞机杯时，带 `fleshlight` 的句不会被抽到。  
-- 难度高会更偏向 `edge` / `prostate` 等。
+| 选项 | cum 值 | Finish 行为 |
+|------|--------|-------------|
+| 极品贱狗不被允许排精！ | **0** | **只从 red 池随机**（固定不允许结局） |
+| 如果表现不错… | 0.2 | 约 20% 从 green 池随机，否则 red 池随机 |
+| 愿意服从… | 0.5 | 约 50% 允许 |
+| 请主人允许… | 0.8 | 约 80% 允许 |
+| 愿意做任何下贱的事… | 0.95 | 约 95% 允许 |
+
+同色池内 **均匀随机**（随机优先）。  
+请至少准备 **1 条 red** 和若干 **green**；只有 red 时 cum>0 仍可能抽到允许失败。
+
+`gameover.nocum1/2/3` 仍保留在 json 中供你以后改写，但 **1.8.0 起结束流程不再自动显示它们**。  
+`gameover.postcum` 仍可能在「允许」进度走完后由 `end()` 显示（可自行改文案）。
 
 ---
 
-## 4. 游戏流程（`game.js`）
+## 4. 图片（可按阶段文件夹）
 
-```text
-点「开始」
-  → unlockAudio() 解锁浏览器播放
-  → startSession() 按选项算目标时长（有随机浮动）
-  → goOn() 循环：
-       pass==1 : 显示 first，播 go_{audioIdx}
-       未到总时长 : 抽 go 或 stop，播对应语音，走进度条
-       到总时长后 : 进入 Finish 分支
-```
-
-### 4.1 Finish 与「是否允许排精」选项
-
-首页「渴望排精」对应 `cum` 数值 `0 ~ 0.95`：
-
-| 选项值 | 行为 |
-|--------|------|
-| **0** | 只从 finish 里 **红色（拒绝）** 句中抽取，**会播 finish 语音**，进度结束后附带 gameover 说明 |
-| **0.2~0.95** | 按概率允许；未允许时用 `finish[0]`（默认拒绝稿）；允许则用绿色句 |
-
-若你感觉「结束不是我准备的话、也没声音」：  
-以前 `cum=0` 时会**完全跳过** finish，只显示 `gameover.nocum*` 且不播语音。  
-**1.7.1 已改为走 finish 拒绝句 + 语音。**
-
-### 4.2 关键函数
-
-| 函数 | 作用 |
-|------|------|
-| `getAudioIdx(phase, msg)` | 从语句数组取 audioIdx |
-| `playVoice(phase, idx)` | 播放 `audio/phase/phase_idx.wav` |
-| `pickMessage(...)` | 按难度/飞机杯/防重复加权抽句 |
-| `showBg(phase)` | 若 `messages.images[phase]` 非空，随机设背景图 |
-| `buildVoiceLibrary()` | 生成「主人留音」表格 |
-
----
-
-## 5. 图片：可以单独建文件夹吗？
-
-**可以。** 推荐与语音平行：
-
-```text
-EDGE7/images/go/xxx.jpg
-EDGE7/images/stop/xxx.jpg
-EDGE7/images/finish/xxx.jpg
-```
-
-当前代码已支持在 `messages.json` 里写路径（相对网站根，即相对 `EDGE7/`）：
+1. 把文件放进 `EDGE7/images/go|stop|finish/`  
+2. 在 `messages.json`：
 
 ```json
 "images": {
-  "go": [
-    "images/go/01.jpg",
-    "images/go/02.webp"
-  ],
+  "go": ["images/go/01.webp"],
   "stop": ["images/stop/01.jpg"],
-  "finish": ["images/finish/allow.jpg", "images/finish/deny.jpg"]
+  "finish": ["images/finish/allow.webp"]
 }
 ```
 
-`showBg('go'|'stop'|'finish')` 会在对应阶段随机挑一张做 `#mainwrapper` 背景。
+路径相对 **EDGE7/**。当前按**阶段随机**背景，不是一句一图。
 
-**注意：**
-
-- 路径不要写成 `/EDGE7/images/...`，应是 `images/...`。  
-- 文件必须一起部署到 Pages。  
-- 若希望「像语音一样每条语句绑一张图」，需要再在语句数组里加字段并改 `game.js`（当前是**按阶段随机**，不是按句子一对一）。
-
----
-
-## 6. 图片 / 视频格式建议
-
-### 图片（背景）
-
-| 格式 | 建议 | 说明 |
-|------|------|------|
-| **WebP** | ★首选 | 体积小、浏览器支持好 |
-| **JPEG** | 照片类很好 | 兼容性最好 |
-| **PNG** | 图标/透明 | 照片会偏大，背景慎用 |
-| GIF | 不推荐当大背景 | 体积大 |
-
-建议：
-
-- 分辨率：约 **1280×720 ~ 1920×1080**，不必 4K（浪费流量）  
-- 单张：**100–400KB** 较合适  
-- 颜色暗一些，避免盖住黄色文字
-
-### 视频
-
-当前**没有**内置视频播放逻辑，要自己在 `index.html` + `game.js` 加 `<video>` 或背景视频。
-
-若以后要加，格式建议：
+### 图片格式建议
 
 | 格式 | 建议 |
 |------|------|
-| **MP4 (H.264 + AAC)** | ★首选，手机/桌面都稳 |
-| WebM (VP9) | 可作第二来源，体积更小 |
-| MOV | 不推荐网页直链 |
+| WebP | 首选，体积小 |
+| JPEG | 照片兼容最好 |
+| PNG | 透明图；大背景慎用 |
 
-建议：
-
-- 分辨率 720p 或 1080p，码率控制在可接受范围  
-- 单段尽量 **&lt; 5–15MB**（Pages/流量友好）  
-- 循环背景可用 `video` 标签 `muted loop playsinline`（移动端自动播放通常必须静音）
-
-语音继续用 **WAV** 可以；若嫌大可转 **MP3/OGG**，但要同步改 `game.js` 里的扩展名。
+单张建议约 100–400KB，宽度约 1280–1920。
 
 ---
 
-## 7. 手动改代码的常用步骤
+## 5. 视频占位
 
-1. 改文案 → 编辑 `EDGE7/messages.json`（注意 JSON 逗号、引号）  
-2. 加语音 → 放入 `audio/阶段/阶段_编号.wav`，json 里写上同一编号  
-3. 加背景图 → 放入 `images/阶段/`，填进 `messages.json` 的 `images`  
-4. 改逻辑 → 编辑 `EDGE7/game.js`  
-5. 改排版 → 编辑 `EDGE7/index.html` 里 `<style>`  
-6. 本地可用任意静态服务器打开 `EDGE7/` 目录测试  
-7. 部署：把 `EDGE7/` 内容推到 GitHub 后用 Cloudflare Pages 发布（或沿用现有流水线）
+目录已建：`EDGE7/video/go|stop|finish/`。  
+**播放逻辑尚未接入**，放入文件不会自动播放；以后要接线需改 `game.js` / `index.html`。
 
-### 自检清单
+### 为什么常说 MP4 比 WebM「更好用」？
 
-- [ ] `audioIdx` 从 **0** 起，且文件真实存在  
-- [ ] `finish` 拒绝句的颜色字段是字符串 **`"red"`**，允许是 **`"green"`**  
-- [ ] 改完 json 用校验工具确认没有多余逗号  
-- [ ] 手机上需先点页面（开始/试听）才能出声（浏览器策略）
+不是画质一定更强，而是 **兼容与省心**：
 
----
+| | MP4 (H.264) | WebM (VP8/VP9) |
+|--|-------------|----------------|
+| iPhone / Safari | 支持好 | 老版本/部分环境较差 |
+| 安卓 / Chrome | 支持 | 支持好 |
+| 导出工具 | 随处都是 | 略少 |
+| 自动播放策略 | 同样通常要静音 | 同样 |
 
-## 8. 选项与代码字段对照
-
-| 界面文案 | 表单 name | 代码变量 |
-|----------|-----------|----------|
-| 控制时长 | `duration` | `durationMin`（分钟） |
-| 难度 | `mode` | `modeKey` → `modes` 倍率 |
-| 是否渴望排精 | `cum` | `cumFactor`（0~0.95） |
-| 飞机杯 | `fleshlight` | `useFleshlight` |
-
-难度倍率在 `game.js` 顶部 `modes` 对象。
+所以网页默认源用 **MP4** 最省事；若要再省流量，可加 WebM 作第二 `<source>`。  
+移动端背景循环视频一般需要：`muted` + `playsinline` + `loop`。
 
 ---
 
-有问题优先查：`messages.json` 是否保存成功、语音编号是否对上、结束时 `cum` 是否为 0（拒绝路径）、浏览器控制台是否有 `playVoice failed`。
+## 6. 改代码时注意
+
+- 不要随意改 `minimize-css.css` / 主色与布局风格（除非明确要求改 UI）。  
+- 改逻辑优先 `game.js`，改话术优先 `messages.json`。  
+- 改完检查：json 合法、`audioIdx` 文件存在、finish 的 `"red"`/`"green"` 字符串写对。
+
+---
+
+## 7. 选项 ↔ 代码
+
+| 界面 | name | 变量 |
+|------|------|------|
+| 时长 | duration | durationMin（分钟） |
+| 难度 | mode | modeKey |
+| 渴望排精 | cum | cumFactor |
+| 飞机杯 | fleshlight | useFleshlight |
