@@ -90,7 +90,7 @@
   }
 
   function preloadAudio() {
-    ['go', 'stop', 'finish'].forEach(function (phase) {
+    ['first', 'go', 'stop', 'finish'].forEach(function (phase) {
       var max = maxAudioIdx(phase);
       var counts = (MSG.audioCounts && MSG.audioCounts[phase]) || (max + 1);
       var n = Math.max(max + 1, counts || 0);
@@ -142,8 +142,7 @@
 
   function playVoice(phase, audioIdx) {
     if (audioIdx === undefined || audioIdx === null || audioIdx < 0) return;
-    // first intro reuses go pool
-    var poolPhase = phase === 'first' ? 'go' : phase;
+    var poolPhase = phase; // first 独立：audio/first/first_N.wav
     var a = ensureAudio(poolPhase, audioIdx);
     if (!a) return;
     stopAllAudio();
@@ -184,14 +183,7 @@
   /** phase: first | go | stop | finish — 视频/图片铺满全屏作背景，不切页面 */
   function showBg(phase) {
     var vids = (MSG.videos && MSG.videos[phase]) || (window.videos && window.videos[phase]) || [];
-    // 开场若未单独配置 first 视频，回退到 go
-    if (phase === 'first' && (!vids || !vids.length)) {
-      vids = (MSG.videos && MSG.videos.go) || (window.videos && window.videos.go) || [];
-    }
     var imgs = (MSG.images && MSG.images[phase]) || [];
-    if (phase === 'first' && (!imgs || !imgs.length)) {
-      imgs = (MSG.images && MSG.images.go) || [];
-    }
     var $mw = $('#mainwrapper');
     var v = document.getElementById('bgVideo');
 
@@ -450,7 +442,7 @@
       var audioJobs = [];
       keys.forEach(function (k) {
         var low = relOf(k).toLowerCase();
-        var m = low.match(/^audio\/(go|stop|finish)\/(go|stop|finish)_(\d+)\.(wav|mp3|ogg)$/);
+        var m = low.match(/^audio\/(first|go|stop|finish)\/(first|go|stop|finish)_(\d+)\.(wav|mp3|ogg)$/);
         if (m && m[1] === m[2]) {
           audioJobs.push(files[k].async('blob').then(function (blob) {
             var url = URL.createObjectURL(blob);
@@ -483,7 +475,7 @@
         keys.forEach(function (k) {
           packRelSet[relOf(k).toLowerCase()] = true;
         });
-        ['go', 'stop', 'finish'].forEach(function (ph) {
+        ['first', 'go', 'stop', 'finish'].forEach(function (ph) {
           (origImages[ph] || []).forEach(function (imgPath) {
             if (!imgPath || String(imgPath).indexOf('blob:') === 0) return;
             var want = String(imgPath).replace(/^\.\//, '').replace(/^\/+/, '').toLowerCase();
@@ -493,11 +485,11 @@
             if (!found) pathWarns.push('包内不存在图片路径: ' + imgPath);
           });
         });
-        data.images = { go: [], stop: [], finish: [] };
+        data.images = { first: [], go: [], stop: [], finish: [] };
         var imgJobs = [];
         keys.forEach(function (k) {
           var low = relOf(k).toLowerCase();
-          var im = low.match(/^images\/(go|stop|finish)\/.+\.(webp|jpg|jpeg|png|gif)$/);
+          var im = low.match(/^images\/(first|go|stop|finish)\/.+\.(webp|jpg|jpeg|png|gif)$/);
           if (im) {
             imgJobs.push(files[k].async('blob').then(function (blob) {
               var url = URL.createObjectURL(blob);
@@ -522,24 +514,14 @@
       });
       // audioIdx without file in pack (and not relying on site default — warn only if pack had some audio)
       if (nAudio > 0) {
-        ['go', 'stop', 'finish'].forEach(function (ph) {
+        ['first', 'go', 'stop', 'finish'].forEach(function (ph) {
           (ctx.data[ph] || []).forEach(function (row) {
-            var idx = getAudioIdx(ph === 'first' ? 'go' : ph, row);
-            if (ph === 'go' || ph === 'stop' || ph === 'finish') {
-              var id = getAudioIdx(ph, row);
-              if (id >= 0 && !packAudioUrls[ph + ':' + id]) {
-                warns.push('缺少语音 audio/' + ph + '/' + ph + '_' + id + '.wav');
-              }
+            var id = getAudioIdx(ph, row);
+            if (id >= 0 && !packAudioUrls[ph + ':' + id]) {
+              warns.push('缺少语音 audio/' + ph + '/' + ph + '_' + id + '.wav');
             }
           });
         });
-        var first = (ctx.data.first || [])[0];
-        if (first) {
-          var fi = getAudioIdx('first', first);
-          if (fi >= 0 && !packAudioUrls['go:' + fi]) {
-            warns.push('开场编号 ' + fi + ' 无 audio/go/go_' + fi + '.wav');
-          }
-        }
       }
       audioPools = { go: [], stop: [], finish: [] };
       var msg = '已加载资料包：' + file.name + '（包内语音 ' + nAudio + ' 条，仅本局）';
@@ -558,20 +540,48 @@
   function buildVoiceLibrary() {
     var $body = $('#voiceLibBody');
     $body.empty();
+
+    function mediaFor(phase, audioIdx) {
+      var out = { video: null, image: null };
+      var vids = (MSG.videos && MSG.videos[phase]) || [];
+      var imgs = (MSG.images && MSG.images[phase]) || [];
+      var i, u, needle;
+      needle = phase + '_' + audioIdx;
+      for (i = 0; i < vids.length; i++) {
+        u = String(vids[i]);
+        if (u.indexOf(needle) >= 0 || u.indexOf('_' + audioIdx + '.') >= 0) {
+          out.video = u;
+          break;
+        }
+      }
+      if (!out.video && vids.length === 1 && audioIdx === 0) out.video = vids[0];
+      for (i = 0; i < imgs.length; i++) {
+        u = String(imgs[i]);
+        if (u.indexOf(needle) >= 0 || u.indexOf('_' + audioIdx + '.') >= 0) {
+          out.image = u;
+          break;
+        }
+      }
+      if (!out.image && imgs.length && audioIdx >= 0 && audioIdx < imgs.length) {
+        out.image = imgs[audioIdx];
+      }
+      return out;
+    }
+
     function section(title, phase, list) {
       var $table = $('<table class="vl-table"/>');
       $table.append($('<caption/>').text(title));
-      var $thead = $('<thead><tr><th>编号</th><th>语句</th><th>试听</th></tr></thead>');
-      $table.append($thead);
+      $table.append($('<thead><tr><th>编号</th><th>语句</th><th>语音</th><th>媒体</th></tr></thead>'));
       var $tbody = $('<tbody/>');
-      list.forEach(function (row) {
+      (list || []).forEach(function (row) {
         var idx = getAudioIdx(phase, row);
         var full = stripHtml(row[0]);
         var $tr = $('<tr/>');
         $tr.append($('<td class="vl-idx"/>').text(idx >= 0 ? idx : '—'));
         $tr.append($('<td class="vl-text"/>').text(full));
-        var $btn = $('<button type="button" class="vl-play" title="播放">▶</button>');
-        $btn.attr('data-phase', phase === 'first' ? 'go' : phase);
+
+        var $btn = $('<button type="button" class="vl-play" title="播放语音">▶</button>');
+        $btn.attr('data-phase', phase);
         $btn.attr('data-idx', idx);
         $btn.on('click', function () {
           unlockAudio();
@@ -586,16 +596,70 @@
           }
         });
         $tr.append($('<td class="vl-act"/>').append($btn));
+
+        var med = mediaFor(phase, idx);
+        var $med = $('<td class="vl-media"/>');
+        if (med.video) {
+          var $vb = $('<button type="button" class="vl-media-btn" title="看视频">🎬</button>');
+          $vb.on('click', function () { openMediaModal('video', med.video); });
+          $med.append($vb);
+        }
+        if (med.image) {
+          var $ib = $('<button type="button" class="vl-media-btn" title="看图片">🖼</button>');
+          $ib.on('click', function () { openMediaModal('image', med.image); });
+          $med.append($ib);
+        }
+        if (!med.video && !med.image) {
+          $med.append($('<span class="vl-na">—</span>'));
+        }
+        $tr.append($med);
         $tbody.append($tr);
       });
       $table.append($tbody);
       $body.append($table);
     }
-    if (MSG.first && MSG.first.length) section('开场', 'first', MSG.first);
+
+    if (MSG.first && MSG.first.length) section('开场 First（独立阶段）', 'first', MSG.first);
     section('进行中 Go', 'go', MSG.go || []);
     section('停止 Stop', 'stop', MSG.stop || []);
     section('最终 Finish', 'finish', MSG.finish || []);
   }
+
+  function openMediaModal(kind, url) {
+    var $m = $('#mediaModal');
+    var $c = $('#mediaModalContent');
+    $c.empty();
+    if (kind === 'video') {
+      var v = document.createElement('video');
+      v.src = url;
+      v.controls = true;
+      v.autoplay = true;
+      v.playsInline = true;
+      v.setAttribute('playsinline', '');
+      v.style.maxWidth = '100%';
+      v.style.maxHeight = '70vh';
+      $c.append(v);
+    } else {
+      var img = document.createElement('img');
+      img.src = url;
+      img.alt = 'preview';
+      img.style.maxWidth = '100%';
+      img.style.maxHeight = '70vh';
+      $c.append(img);
+    }
+    $m.addClass('open').show();
+  }
+
+  function closeMediaModal() {
+    var $m = $('#mediaModal');
+    var $c = $('#mediaModalContent');
+    $c.find('video').each(function () {
+      try { this.pause(); this.removeAttribute('src'); this.load(); } catch (e) {}
+    });
+    $c.empty();
+    $m.removeClass('open').hide();
+  }
+
 
   function showHome() {
     stopBgVideo();
@@ -682,7 +746,7 @@
   function packReadmeText() {
     return [
       'EDGE-Infinity 本地资料包',
-      '目录：messages.json + audio/{go,stop,finish}/ + images/ + video/',
+      '目录：messages.json + audio/{first,go,stop,finish}/ + images/ + video/',
       '语音命名：go_0.wav 对应编号 0；导入网站「我有主人」使用。',
       'green=允许 red=不允许'
     ].join('\n');
@@ -697,7 +761,7 @@
     zip.file('README.txt', packReadmeText());
     zip.file('messages.json', JSON.stringify(MSG, null, 2));
     // folder placeholders
-    ['go', 'stop', 'finish'].forEach(function (ph) {
+    ['first', 'go', 'stop', 'finish'].forEach(function (ph) {
       zip.folder('audio/' + ph);
       zip.folder('images/' + ph);
       zip.folder('video/' + ph);
@@ -865,6 +929,7 @@ function applyScale(scale) {
     }
 
     function showProgressAndGoOn(timeout, callback, bar) {
+      if (!timeout || timeout < 200 || isNaN(timeout)) timeout = 1000;
       var t0 = Date.now();
       (function tick() {
         if (!session || !session.running) return;
@@ -907,15 +972,17 @@ function applyScale(scale) {
 
       if (duration < targetSec || passType === 'go') {
         if (session.pass === 1) {
-          var first = MSG.first[0];
-          $mw.removeClass('go stop finish cancel').addClass('go');
-          showBg('first');
-          $('#message').html(first[0]);
-          // 开场也播语音：first 最后一项 audioIdx → go_{n}.wav
-          playVoice('first', getAudioIdx('first', first));
-          updateFlash(first[2]);
-          showProgressAndGoOn(first[1] * 1000 * multiplier, goOn, 'jerkbar');
-          return;
+          var first = (MSG.first && MSG.first[0]) ? MSG.first[0] : null;
+          if (first) {
+            $mw.removeClass('go stop finish cancel').addClass('go');
+            showBg('first');
+            $('#message').html(first[0]);
+            playVoice('first', getAudioIdx('first', first));
+            updateFlash(typeof first[2] === 'number' ? first[2] : 2);
+            var firstMs = (typeof first[1] === 'number' ? first[1] : 30) * 1000 * multiplier;
+            showProgressAndGoOn(firstMs, goOn, 'jerkbar');
+            return;
+          }
         }
 
         var picked = pickMessage(passType, modeKey, useFleshlight, session.lastPick, session.recentTags);
@@ -1023,6 +1090,9 @@ function applyScale(scale) {
     });
     $('#btnAbortSession').on('click', function () {
       abortSession();
+    });
+    $('#mediaModalClose, #mediaModalBackdrop').on('click', function () {
+      closeMediaModal();
     });
 
     var scale = 1;

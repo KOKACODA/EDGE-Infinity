@@ -1,5 +1,5 @@
 {
-  "version": "1.10.3",
+  "version": "1.11.0",
   "phases": {
     "phase2": "现在进入第二阶段，节奏会明显加快！贱狗依然没有射精的权利，给老子好好憋着！",
     "phase3": "这是最后阶段！贱狗随时可能会被允许射精，也可能被主人无情拒绝！做好心理准备！"
@@ -423,27 +423,37 @@
     ]
   },
   "images": {
+    "first": [],
     "go": [],
     "stop": [],
     "finish": []
   },
   "audioCounts": {
+    "first": 1,
     "go": 21,
     "stop": 11,
     "finish": 9
   },
   "mediaFolders": {
+    "audio": [
+      "audio/first/",
+      "audio/go/",
+      "audio/stop/",
+      "audio/finish/"
+    ],
     "images": [
+      "images/first/",
       "images/go/",
       "images/stop/",
       "images/finish/"
     ],
     "video": [
+      "video/first/",
       "video/go/",
       "video/stop/",
       "video/finish/"
     ],
-    "note": "Put files in these folders under EDGE7/, then list relative paths in images.go/stop/finish arrays. Video not wired yet."
+    "note": "first is its own stage: audio/first/first_N.wav video/first/first_N.mp4"
   },
   "videos": {
     "first": [

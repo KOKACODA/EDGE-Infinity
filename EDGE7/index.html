@@ -200,7 +200,58 @@
   margin-bottom: 12px;
   flex-wrap: wrap;
 }
+.vl-media-btn {
+  background: #333;
+  border: 1px solid #666;
+  color: #ffcc00;
+  border-radius: 4px;
+  padding: 2px 6px;
+  cursor: pointer;
+  margin-right: 4px;
+  font-size: 14px;
+}
+.vl-na { color: #666; }
+#mediaModal {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  align-items: center;
+  justify-content: center;
+}
+#mediaModal.open { display: flex; }
+#mediaModalBackdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,.75);
+}
+#mediaModalBox {
+  position: relative;
+  z-index: 1;
+  max-width: 92vw;
+  max-height: 85vh;
+  background: #111;
+  border: 1px solid #555;
+  border-radius: 10px;
+  padding: 12px;
+  box-shadow: 0 8px 32px rgba(0,0,0,.6);
+}
+#mediaModalClose {
+  position: absolute;
+  right: 8px;
+  top: 6px;
+  background: #333;
+  border: 1px solid #666;
+  color: #fff;
+  border-radius: 4px;
+  width: 32px;
+  height: 32px;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+}
 #voiceLibPage h2 {
+
   margin: 0;
   font-size: calc(1.25rem * var(--ui-scale));
   color: #ffcc00;
@@ -377,13 +428,11 @@
     <div><strong>资料包目录结构</strong></div>
     <pre id="packStructure" style="font-size:12px;line-height:1.45;background:rgba(0,0,0,.35);padding:10px;border-radius:6px;overflow:auto;color:#ddd;">EDGE-Pack/
   README.txt
-  messages.json          （优先）
-  EDGE-内容.xlsx         （可选，无 json 时用）
-  audio/go/go_0.wav …
-  audio/stop/stop_0.wav …
-  audio/finish/finish_0.wav …
-  images/go|stop|finish/
-  video/go|stop|finish/  （预留）</pre>
+  messages.json
+  audio/first/first_0.wav   ← 开场独立
+  audio/go/ … stop/ … finish/
+  images/first|go|stop|finish/
+  video/first|go|stop|finish/</pre>
     <div style="margin-top:12px"><strong>1. 下载空模板包</strong></div>
     <div class="pack-row">
       <a id="btnDlPackZip" href="templates/EDGE-Pack.zip" download>下载 EDGE-Pack.zip</a>

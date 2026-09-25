@@ -1,1 +1,1 @@
-将 go 阶段图片放于此目录
+webp/jpg/png
