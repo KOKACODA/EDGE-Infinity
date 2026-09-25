@@ -25,7 +25,7 @@
   font-size: calc(1.35rem * var(--ui-scale));
 }
 #choose h2.title-row .title-text { margin: 0; }
-#btnVoiceLib {
+#btnVoiceLib, #btnMasterPack {
   background: #333;
   color: #ffcc00;
   border: 1px solid #888;
@@ -36,7 +36,7 @@
   font-weight: normal;
   vertical-align: middle;
 }
-#btnVoiceLib:hover { background: #444; }
+#btnVoiceLib:hover, #btnMasterPack:hover { background: #444; }
 
 #message {
   white-space: pre-line;
@@ -142,6 +142,27 @@
   padding: 12px 10px 40px;
 }
 #voiceLibPage.open { display: block; }
+#packPage {
+  display: none;
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 12px 10px 40px;
+}
+#packPage.open { display: block; }
+#packPage .vl-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+#packPage h2 {
+  margin: 0;
+  font-size: calc(1.25rem * var(--ui-scale));
+  color: #ffcc00;
+}
+
 #voiceLibPage .vl-header {
   display: flex;
   align-items: center;
@@ -155,7 +176,7 @@
   font-size: calc(1.25rem * var(--ui-scale));
   color: #ffcc00;
 }
-#btnBackHome {
+#btnBackHome, #btnBackHomePack {
   background: #333;
   color: #eee;
   border: 1px solid #666;
@@ -163,7 +184,7 @@
   padding: 6px 14px;
   cursor: pointer;
 }
-#btnBackHome:hover { background: #444; }
+#btnBackHome:hover, #btnBackHomePack:hover { background: #444; }
 #voiceLibHint {
   font-size: calc(0.85rem * var(--ui-scale));
   color: #999;
@@ -237,6 +258,7 @@
 <h2 class="title-row">
   <span class="title-text">请求主人恩准贱狗排精！</span>
   <button type="button" id="btnVoiceLib">主人留音</button>
+  <button type="button" id="btnMasterPack">我有主人</button>
 </h2>
 <div class="instructions">
 <p><strong>贱狗注意：</strong>你正在请求主人彻底控制你的狗鸡巴、龟背、马眼、骚屁眼和前列腺。请诚实调整选项，严格服从每一条指令。</p>
@@ -311,6 +333,31 @@
   </div>
   <p id="voiceLibHint">表格式对照全部语句与语音编号；点 ▶ 试听（不参与玩法）。</p>
   <div id="voiceLibBody"></div>
+</div>
+
+
+<div id="packPage">
+  <div class="vl-header">
+    <h2>我有主人</h2>
+    <button type="button" id="btnBackHomePack" class="btn-back">← 返回选项</button>
+  </div>
+  <p id="voiceLibHint">导入 / 导出本局内容表。解析只在浏览器内完成，<strong>不会上传到服务器</strong>；刷新页面后恢复网站默认。</p>
+  <div id="packBar">
+    <div><strong>1. 模板</strong></div>
+    <div class="pack-row">
+      <a id="btnDlTemplate" href="templates/EDGE-内容模板.xlsx" download>下载 Excel 模板</a>
+    </div>
+    <div style="margin-top:12px"><strong>2. 导入（单次游玩）</strong></div>
+    <div class="pack-row">
+      <input type="file" id="packFile" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
+    </div>
+    <div style="margin-top:12px"><strong>3. 导出 / 恢复</strong></div>
+    <div class="pack-row">
+      <button type="button" id="btnPackExport" class="btn btn-default" style="padding:6px 12px;font-size:13px">导出当前内容为 Excel</button>
+      <button type="button" id="btnPackReset" class="btn btn-default" style="padding:6px 12px;font-size:13px">恢复默认内容</button>
+    </div>
+    <div id="packStatus" class="def">当前：网站默认内容</div>
+  </div>
 </div>
 
 <div id="gamewrapper" style="display:none">

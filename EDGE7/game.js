@@ -1,5 +1,5 @@
 /**
- * EDGE-Infinity game logic (v1.9.0)
+ * EDGE-Infinity game logic (v1.9.1)
  */
 (function (window, $) {
   'use strict';
@@ -402,6 +402,7 @@
 
   function showHome() {
     $('#voiceLibPage').removeClass('open').hide();
+    $('#packPage').removeClass('open').hide();
     $('#gamewrapper').hide();
     $('#choose').show();
   }
@@ -410,8 +411,57 @@
     unlockAudio();
     stopAllAudio();
     $('#choose').hide();
+    $('#packPage').removeClass('open').hide();
     $('#gamewrapper').hide();
     $('#voiceLibPage').addClass('open').show();
+  }
+
+  function showPackPage() {
+    stopAllAudio();
+    $('#choose').hide();
+    $('#voiceLibPage').removeClass('open').hide();
+    $('#gamewrapper').hide();
+    $('#packPage').addClass('open').show();
+  }
+
+  /** Export current MSG to xlsx (SheetJS CE) */
+  function exportMessagesXlsx() {
+    if (typeof XLSX === 'undefined' || !MSG) {
+      $('#packStatus').addClass('err').text('无法导出：表格库或内容未就绪');
+      return;
+    }
+    var wb = XLSX.utils.book_new();
+    function aoa_sheet(name, header, rows) {
+      var aoa = [header].concat(rows);
+      var ws = XLSX.utils.aoa_to_sheet(aoa);
+      XLSX.utils.book_append_sheet(wb, ws, name);
+    }
+    aoa_sheet('说明', ['说明'], [
+      ['EDGE-Infinity 导出内容（可再导入「我有主人」）'],
+      ['green=允许释放；red=不允许释放'],
+      ['语音编号对应站点 audio/{阶段}/{阶段}_{编号}.wav']
+    ]);
+    var firstRows = (MSG.first || []).map(function (r) {
+      return [r[3], r[0], r[1], r[2], '', ''];
+    });
+    aoa_sheet('开场', ['编号audioIdx', '文案', '秒数', 'fps', '图片路径', '备注'], firstRows);
+    var goRows = (MSG.go || []).map(function (r, i) {
+      var tags = (MSG.tags && MSG.tags.go && MSG.tags.go[i]) ? MSG.tags.go[i].join(',') : '';
+      return [r[3], r[0], r[1], r[2], tags, '', ''];
+    });
+    aoa_sheet('go', ['编号audioIdx', '文案', '秒数', 'fps', '标签tags', '图片路径', '备注'], goRows);
+    var stopRows = (MSG.stop || []).map(function (r, i) {
+      var tags = (MSG.tags && MSG.tags.stop && MSG.tags.stop[i]) ? MSG.tags.stop[i].join(',') : '';
+      return [r[2], r[0], r[1], tags, '', ''];
+    });
+    aoa_sheet('stop', ['编号audioIdx', '文案', '秒数', '标签tags', '图片路径', '备注'], stopRows);
+    var finRows = (MSG.finish || []).map(function (r, i) {
+      var tags = (MSG.tags && MSG.tags.finish && MSG.tags.finish[i]) ? MSG.tags.finish[i].join(',') : '';
+      return [r[4], r[0], r[1], r[2], r[3], tags, '', ''];
+    });
+    aoa_sheet('finish', ['编号audioIdx', '文案', '秒数', '颜色green或red', 'fps', '标签tags', '图片路径', '备注'], finRows);
+    XLSX.writeFile(wb, 'EDGE-我的内容.xlsx');
+    $('#packStatus').removeClass('err').text('已导出当前内容（浏览器下载）');
   }
 
   function applyScale(scale) {
@@ -504,6 +554,7 @@
 
     $('#choose').hide();
     $('#voiceLibPage').hide();
+    $('#packPage').hide();
     $('#gamewrapper').show();
     try { if (noSleep) noSleep.enable(); } catch (e) {}
 
@@ -664,9 +715,15 @@
     $('#btnVoiceLib').on('click', function () {
       showVoiceLib();
     });
-    $('#btnBackHome').on('click', function () {
+    $('#btnMasterPack').on('click', function () {
+      showPackPage();
+    });
+    $('#btnBackHome, #btnBackHomePack').on('click', function () {
       stopAllAudio();
       showHome();
+    });
+    $('#btnPackExport').on('click', function () {
+      exportMessagesXlsx();
     });
 
     var scale = 1;
@@ -688,6 +745,7 @@
   function boot() {
     $('#gamewrapper').hide();
     $('#voiceLibPage').hide();
+    $('#packPage').hide();
     $('#choose').show();
 
     fetch('messages.json')

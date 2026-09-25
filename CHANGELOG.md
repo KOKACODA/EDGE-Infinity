@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.9.1] - 2026-09-25
+
+### Changed
+- **我有主人** beside 主人留音: dedicated page for template, import, export, reset.
+- Pack controls removed from options form bottom.
+
+## [1.9.0] - 2026-09-25
+
+- Excel single-session load (SheetJS); template xlsx.
+
+
 ## [1.9.0] - 2026-09-25
 
 ### Added
