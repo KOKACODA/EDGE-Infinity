@@ -1,5 +1,5 @@
 /**
- * EDGE-Infinity game logic (v1.10.0)
+ * EDGE-Infinity game logic (v1.10.1)
  */
 (function (window, $) {
   'use strict';
@@ -357,38 +357,9 @@
     var name = (file.name || '').toLowerCase();
     if (name.endsWith('.zip')) {
       loadPackZip(file);
-    } else if (name.endsWith('.xlsx') || name.endsWith('.xls')) {
-      loadPackXlsx(file);
     } else {
-      $('#packStatus').addClass('err').text('请选择 .zip 资料包或 .xlsx 表格');
+      $('#packStatus').addClass('err').text('请选择 .zip 资料包（已不再支持单独导入 Excel）');
     }
-  }
-
-  function loadPackXlsx(file) {
-    if (typeof XLSX === 'undefined') {
-      $('#packStatus').addClass('err').text('表格库未加载，请检查网络后刷新');
-      return;
-    }
-    var reader = new FileReader();
-    reader.onload = function (e) {
-      try {
-        var wb = XLSX.read(e.target.result, { type: 'array' });
-        var result = messagesFromWorkbook(wb);
-        if (!result.ok) {
-          $('#packStatus').removeClass('def').addClass('err').text('加载失败：' + result.errors.join('；'));
-          return;
-        }
-        clearPackMedia();
-        applyMessages(result.data, '已加载表格：' + file.name + '（仅本局；语音仍用网站默认，除非再导入含 audio 的 zip）');
-        if (result.warnings && result.warnings.length) {
-          $('#packStatus').append(' · ' + result.warnings.join('；'));
-        }
-      } catch (err) {
-        console.error(err);
-        $('#packStatus').removeClass('def').addClass('err').text('无法解析表格：' + (err.message || err));
-      }
-    };
-    reader.readAsArrayBuffer(file);
   }
 
   function normalizeZipPath(path) {
@@ -462,6 +433,22 @@
         throw new Error('资料包内未找到 messages.json 或 .xlsx');
       }).then(function (parsed) {
         var data = parsed.data;
+        var pathWarns = [];
+        var origImages = (data.images && typeof data.images === 'object') ? data.images : { go: [], stop: [], finish: [] };
+        var packRelSet = {};
+        keys.forEach(function (k) {
+          packRelSet[relOf(k).toLowerCase()] = true;
+        });
+        ['go', 'stop', 'finish'].forEach(function (ph) {
+          (origImages[ph] || []).forEach(function (imgPath) {
+            if (!imgPath || String(imgPath).indexOf('blob:') === 0) return;
+            var want = String(imgPath).replace(/^\.\//, '').replace(/^\/+/, '').toLowerCase();
+            var found = packRelSet[want] || Object.keys(packRelSet).some(function (k) {
+              return k === want || k.endsWith('/' + want);
+            });
+            if (!found) pathWarns.push('包内不存在图片路径: ' + imgPath);
+          });
+        });
         data.images = { go: [], stop: [], finish: [] };
         var imgJobs = [];
         keys.forEach(function (k) {
@@ -476,15 +463,47 @@
           }
         });
         return Promise.all(imgJobs).then(function () {
-          return { data: data, warnings: parsed.warnings };
+          return { data: data, warnings: (parsed.warnings || []).concat(pathWarns) };
         });
       });
     }).then(function (ctx) {
       var nAudio = Object.keys(packAudioUrls).length;
+      var warns = (ctx.warnings || []).slice();
+      // 校验 messages 里写的图片路径是否在包内（相对路径）
+      var listed = [];
+      ['go', 'stop', 'finish'].forEach(function (ph) {
+        ((ctx.data.imagesListed && ctx.data.imagesListed[ph]) || []).forEach(function (p) {
+          listed.push(ph + ':' + p);
+        });
+      });
+      // audioIdx without file in pack (and not relying on site default — warn only if pack had some audio)
+      if (nAudio > 0) {
+        ['go', 'stop', 'finish'].forEach(function (ph) {
+          (ctx.data[ph] || []).forEach(function (row) {
+            var idx = getAudioIdx(ph === 'first' ? 'go' : ph, row);
+            if (ph === 'go' || ph === 'stop' || ph === 'finish') {
+              var id = getAudioIdx(ph, row);
+              if (id >= 0 && !packAudioUrls[ph + ':' + id]) {
+                warns.push('缺少语音 audio/' + ph + '/' + ph + '_' + id + '.wav');
+              }
+            }
+          });
+        });
+        var first = (ctx.data.first || [])[0];
+        if (first) {
+          var fi = getAudioIdx('first', first);
+          if (fi >= 0 && !packAudioUrls['go:' + fi]) {
+            warns.push('开场编号 ' + fi + ' 无 audio/go/go_' + fi + '.wav');
+          }
+        }
+      }
       audioPools = { go: [], stop: [], finish: [] };
-      applyMessages(ctx.data, '已加载资料包：' + file.name + '（包内语音 ' + nAudio + ' 条，仅本局）');
-      if (ctx.warnings && ctx.warnings.length) {
-        $('#packStatus').append(' · ' + ctx.warnings.join('；'));
+      var msg = '已加载资料包：' + file.name + '（包内语音 ' + nAudio + ' 条，仅本局）';
+      applyMessages(ctx.data, msg);
+      if (warns.length) {
+        var show = warns.slice(0, 8).join('；');
+        if (warns.length > 8) show += '；…共' + warns.length + '条';
+        $('#packStatus').append(' · 警告：' + show);
       }
     }).catch(function (err) {
       console.error(err);
@@ -539,6 +558,21 @@
     $('#packPage').removeClass('open').hide();
     $('#gamewrapper').hide();
     $('#choose').show();
+    $('#btnAbortSession').hide();
+  }
+
+  function abortSession() {
+    if (!session || !session.running) {
+      showHome();
+      return;
+    }
+    session.running = false;
+    window.__edgeTimerRunning = false;
+    clearInterval(window.flashInterval);
+    stopAllAudio();
+    try { if (noSleep) noSleep.disable(); } catch (e) {}
+    $('#mainwrapper').removeClass('go stop finish cancel');
+    showHome();
   }
 
   function showVoiceLib() {
@@ -769,6 +803,7 @@ function applyScale(scale) {
     $('#voiceLibPage').hide();
     $('#packPage').hide();
     $('#gamewrapper').show();
+    $('#btnAbortSession').show();
     try { if (noSleep) noSleep.enable(); } catch (e) {}
 
     var $mw = $('#mainwrapper');
@@ -777,9 +812,10 @@ function applyScale(scale) {
     function end() {
       session.running = false;
       window.__edgeTimerRunning = false;
-      $('#message').html(MSG.gameover.postcum);
-      $mw.removeClass('cancel finish go stop');
+      // 结束文案保持 Finish 本句，不再替换为 gameover.postcum
+      $mw.removeClass('cancel go stop');
       try { if (noSleep) noSleep.disable(); } catch (e) {}
+      $('#btnAbortSession').hide();
     }
 
     function showProgressAndGoOn(timeout, callback, bar) {
@@ -895,6 +931,7 @@ function applyScale(scale) {
             session.running = false;
             window.__edgeTimerRunning = false;
             try { if (noSleep) noSleep.disable(); } catch (e) {}
+            $('#btnAbortSession').hide();
           }, 'jerkbar');
         }
       }
@@ -938,8 +975,8 @@ function applyScale(scale) {
     $('#btnPackExport').on('click', function () {
       exportPackZip();
     });
-    $('#btnPackExportXlsx').on('click', function () {
-      exportMessagesXlsx();
+    $('#btnAbortSession').on('click', function () {
+      abortSession();
     });
 
     var scale = 1;

@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.10.1] - 2026-09-25
+
+### Changed
+- Pack import: zip only (no standalone Excel import)
+- Finish end: keep finish line only (no postcum replace)
+- Zip load warns missing image paths / missing pack audio
+- Mid-session exit (X) next to scale controls
+
+## [1.10.0] - 2026-09-25
+
+
 ## [1.10.0] - 2026-09-25
 
 ### Changed

@@ -342,7 +342,7 @@
     <h2>我有主人</h2>
     <button type="button" id="btnBackHomePack" class="btn-back">← 返回选项</button>
   </div>
-  <p id="voiceLibHint">本地<strong>资料包</strong>（zip）：含文案 + 语音/图片/视频文件夹。仅在浏览器内解压，<strong>不上传服务器</strong>；刷新后恢复默认。</p>
+  <p id="voiceLibHint">本地<strong>资料包</strong>仅支持 <strong>zip</strong>（文案 + audio/images/video 文件夹）。浏览器内解压，<strong>不上传</strong>；刷新后恢复默认。</p>
   <div id="packBar">
     <div><strong>资料包目录结构</strong></div>
     <pre id="packStructure" style="font-size:12px;line-height:1.45;background:rgba(0,0,0,.35);padding:10px;border-radius:6px;overflow:auto;color:#ddd;">EDGE-Pack/
@@ -357,16 +357,14 @@
     <div style="margin-top:12px"><strong>1. 下载空模板包</strong></div>
     <div class="pack-row">
       <a id="btnDlPackZip" href="templates/EDGE-Pack.zip" download>下载 EDGE-Pack.zip</a>
-      <a id="btnDlTemplate" href="templates/EDGE-内容模板.xlsx" download>仅下载 Excel</a>
     </div>
-    <div style="margin-top:12px"><strong>2. 导入资料包（单次游玩）</strong></div>
+    <div style="margin-top:12px"><strong>2. 导入资料包 zip（单次游玩）</strong></div>
     <div class="pack-row">
-      <input type="file" id="packFile" accept=".zip,application/zip,.xlsx,.xls" />
+      <input type="file" id="packFile" accept=".zip,application/zip" />
     </div>
     <div style="margin-top:12px"><strong>3. 导出 / 恢复</strong></div>
     <div class="pack-row">
       <button type="button" id="btnPackExport" class="btn btn-default" style="padding:6px 12px;font-size:13px">导出当前为 zip 资料包</button>
-      <button type="button" id="btnPackExportXlsx" class="btn btn-default" style="padding:6px 12px;font-size:13px">仅导出 Excel</button>
       <button type="button" id="btnPackReset" class="btn btn-default" style="padding:6px 12px;font-size:13px">恢复默认内容</button>
     </div>
     <div id="packStatus" class="def">当前：网站默认内容</div>
@@ -402,6 +400,7 @@
 </div>
 
 <div id="scaleControl" title="界面缩放">
+  <button type="button" id="btnAbortSession" aria-label="退出本局" title="退出本局回选项" style="display:none">✕</button>
   <button type="button" id="scaleDown" aria-label="缩小">−</button>
   <span id="scaleValue">100%</span>
   <button type="button" id="scaleUp" aria-label="放大">+</button>
