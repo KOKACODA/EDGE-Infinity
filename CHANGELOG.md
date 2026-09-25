@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.11.1] - 2026-09-25
+
+### Added
+- Local **folder** import (directory picker / webkitdirectory) in addition to zip
+- Shared pack loader; videos from pack folder also applied
+
+## [1.11.0] - 2026-09-25
+
+
 ## [1.11.0] - 2026-09-25
 
 ### Changed

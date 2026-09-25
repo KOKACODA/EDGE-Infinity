@@ -437,10 +437,17 @@
     <div class="pack-row">
       <a id="btnDlPackZip" href="templates/EDGE-Pack.zip" download>下载 EDGE-Pack.zip</a>
     </div>
-    <div style="margin-top:12px"><strong>2. 导入资料包 zip（单次游玩）</strong></div>
+    <div style="margin-top:12px"><strong>2. 导入资料包（单次游玩，不上传服务器）</strong></div>
     <div class="pack-row">
+      <label style="margin:0">zip：</label>
       <input type="file" id="packFile" accept=".zip,application/zip" />
     </div>
+    <div class="pack-row" style="margin-top:8px">
+      <label style="margin:0">本地文件夹：</label>
+      <input type="file" id="packDir" webkitdirectory directory multiple style="max-width:100%" />
+      <button type="button" id="btnPickDir" class="btn btn-default" style="padding:6px 12px;font-size:13px">选择文件夹…</button>
+    </div>
+    <p style="font-size:12px;color:#999;margin:6px 0 0">浏览器安全限制：不能填盘符路径，须用「选择文件夹」授权读取。Chrome/Edge 可用按钮；其它浏览器可用文件夹文件框。结构需含 messages.json 与 audio/ 等。</p>
     <div style="margin-top:12px"><strong>3. 导出 / 恢复</strong></div>
     <div class="pack-row">
       <button type="button" id="btnPackExport" class="btn btn-default" style="padding:6px 12px;font-size:13px">导出当前为 zip 资料包</button>

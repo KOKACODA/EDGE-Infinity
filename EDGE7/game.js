@@ -388,131 +388,171 @@
     $('#packFile').val('');
   }
 
+
   function handlePackFile(file) {
     if (!file) return;
     var name = (file.name || '').toLowerCase();
     if (name.endsWith('.zip')) {
       loadPackZip(file);
     } else {
-      $('#packStatus').addClass('err').text('请选择 .zip 资料包（已不再支持单独导入 Excel）');
+      $('#packStatus').addClass('err').text('请选择 .zip，或使用「本地文件夹」导入');
     }
   }
 
   function normalizeZipPath(path) {
-    return path.replace(/\\/g, '/').replace(/^\/+/, '');
+    return String(path || '').replace(/\\/g, '/').replace(/^\/+/, '');
   }
 
-  function loadPackZip(file) {
-    if (typeof JSZip === 'undefined') {
-      $('#packStatus').addClass('err').text('JSZip 未加载，请检查网络后刷新');
-      return;
+  /**
+   * 从 path→File/Blob 映射加载资料包（zip 解压或本地文件夹共用）
+   * entries: { 'messages.json': File, 'audio/go/go_0.wav': File, ... }
+   */
+  function loadPackFromEntries(entries, label) {
+    var keys = Object.keys(entries || {});
+    if (!keys.length) {
+      $('#packStatus').addClass('err').text('文件夹为空或未包含文件');
+      return Promise.resolve();
     }
-    $('#packStatus').removeClass('err').text('正在解压资料包…');
-    JSZip.loadAsync(file).then(function (zip) {
-      clearPackMedia();
-      var files = {};
-      zip.forEach(function (relPath, entry) {
-        if (entry.dir) return;
-        files[normalizeZipPath(relPath)] = entry;
-      });
-      var keys = Object.keys(files);
-      var prefix = '';
-      if (keys.length) {
-        var parts0 = keys[0].split('/');
-        if (parts0.length > 1) {
-          var maybe = parts0[0] + '/';
-          var share = keys.filter(function (k) { return k.indexOf(maybe) === 0; }).length;
-          if (share >= keys.length * 0.8) prefix = maybe;
-        }
-      }
-      function relOf(k) {
-        return prefix ? k.slice(prefix.length) : k;
-      }
 
-      var jsonEntry = null;
-      var xlsxEntry = null;
-      keys.forEach(function (k) {
-        var low = relOf(k).toLowerCase();
-        if (low === 'messages.json') jsonEntry = files[k];
-        if (low.endsWith('.xlsx')) {
-          if (!xlsxEntry || low.indexOf('content') >= 0 || low.indexOf('内容') >= 0) xlsxEntry = files[k];
-        }
-      });
+    clearPackMedia();
+    $('#packStatus').removeClass('err').text('正在读取资料包…');
 
-      var audioJobs = [];
-      keys.forEach(function (k) {
-        var low = relOf(k).toLowerCase();
-        var m = low.match(/^audio\/(first|go|stop|finish)\/(first|go|stop|finish)_(\d+)\.(wav|mp3|ogg)$/);
-        if (m && m[1] === m[2]) {
-          audioJobs.push(files[k].async('blob').then(function (blob) {
+    // 去掉统一顶层目录前缀 EDGE-Pack/
+    var prefix = '';
+    var firstKey = keys[0];
+    var parts0 = firstKey.split('/');
+    if (parts0.length > 1) {
+      var maybe = parts0[0] + '/';
+      var share = keys.filter(function (k) { return k.indexOf(maybe) === 0; }).length;
+      if (share >= keys.length * 0.8) prefix = maybe;
+    }
+    function relOf(k) {
+      return prefix ? k.slice(prefix.length) : k;
+    }
+
+    var filesByRel = {};
+    keys.forEach(function (k) {
+      filesByRel[relOf(k)] = entries[k];
+    });
+    var relKeys = Object.keys(filesByRel);
+
+    var jsonFile = null;
+    var xlsxFile = null;
+    relKeys.forEach(function (rel) {
+      var low = rel.toLowerCase();
+      if (low === 'messages.json') jsonFile = filesByRel[rel];
+      if (low.endsWith('.xlsx')) {
+        if (!xlsxFile || low.indexOf('content') >= 0 || low.indexOf('内容') >= 0) xlsxFile = filesByRel[rel];
+      }
+    });
+
+    function readAsArrayBuffer(file) {
+      return file.arrayBuffer ? file.arrayBuffer() : new Promise(function (resolve, reject) {
+        var fr = new FileReader();
+        fr.onload = function () { resolve(fr.result); };
+        fr.onerror = reject;
+        fr.readAsArrayBuffer(file);
+      });
+    }
+    function readAsText(file) {
+      return file.text ? file.text() : new Promise(function (resolve, reject) {
+        var fr = new FileReader();
+        fr.onload = function () { resolve(fr.result); };
+        fr.onerror = reject;
+        fr.readAsText(file);
+      });
+    }
+
+    var audioJobs = [];
+    relKeys.forEach(function (rel) {
+      var low = rel.toLowerCase();
+      var m = low.match(/^audio\/(first|go|stop|finish)\/(first|go|stop|finish)_(\d+)\.(wav|mp3|ogg)$/);
+      if (m && m[1] === m[2]) {
+        audioJobs.push(
+          Promise.resolve(filesByRel[rel]).then(function (f) {
+            return f instanceof Blob ? f : readAsArrayBuffer(f).then(function (buf) {
+              return new Blob([buf]);
+            });
+          }).then(function (blob) {
             var url = URL.createObjectURL(blob);
             packObjectUrls.push(url);
             packAudioUrls[m[1] + ':' + m[3]] = url;
-          }));
-        }
+          })
+        );
+      }
+    });
+
+    return Promise.all(audioJobs).then(function () {
+      if (jsonFile) {
+        return readAsText(jsonFile).then(function (s) {
+          return { data: JSON.parse(s), warnings: [] };
+        });
+      }
+      if (xlsxFile && typeof XLSX !== 'undefined') {
+        return readAsArrayBuffer(xlsxFile).then(function (buf) {
+          var wb = XLSX.read(buf, { type: 'array' });
+          var result = messagesFromWorkbook(wb);
+          if (!result.ok) throw new Error(result.errors.join('；'));
+          return { data: result.data, warnings: result.warnings || [] };
+        });
+      }
+      throw new Error('未找到 messages.json 或 .xlsx（请选中资料包根目录）');
+    }).then(function (parsed) {
+      var data = parsed.data;
+      var pathWarns = [];
+      var origImages = (data.images && typeof data.images === 'object') ? data.images : {};
+      var packRelSet = {};
+      relKeys.forEach(function (k) { packRelSet[k.toLowerCase()] = true; });
+      ['first', 'go', 'stop', 'finish'].forEach(function (ph) {
+        (origImages[ph] || []).forEach(function (imgPath) {
+          if (!imgPath || String(imgPath).indexOf('blob:') === 0) return;
+          var want = String(imgPath).replace(/^\.\//, '').replace(/^\/+/, '').toLowerCase();
+          var found = packRelSet[want] || Object.keys(packRelSet).some(function (k) {
+            return k === want || k.endsWith('/' + want);
+          });
+          if (!found) pathWarns.push('包内不存在图片路径: ' + imgPath);
+        });
       });
 
-      return Promise.all(audioJobs).then(function () {
-        if (jsonEntry) {
-          return jsonEntry.async('string').then(function (s) {
-            return { data: JSON.parse(s), warnings: [] };
-          });
-        }
-        if (xlsxEntry && typeof XLSX !== 'undefined') {
-          return xlsxEntry.async('arraybuffer').then(function (buf) {
-            var wb = XLSX.read(buf, { type: 'array' });
-            var result = messagesFromWorkbook(wb);
-            if (!result.ok) throw new Error(result.errors.join('；'));
-            return { data: result.data, warnings: result.warnings || [] };
-          });
-        }
-        throw new Error('资料包内未找到 messages.json 或 .xlsx');
-      }).then(function (parsed) {
-        var data = parsed.data;
-        var pathWarns = [];
-        var origImages = (data.images && typeof data.images === 'object') ? data.images : { go: [], stop: [], finish: [] };
-        var packRelSet = {};
-        keys.forEach(function (k) {
-          packRelSet[relOf(k).toLowerCase()] = true;
-        });
-        ['first', 'go', 'stop', 'finish'].forEach(function (ph) {
-          (origImages[ph] || []).forEach(function (imgPath) {
-            if (!imgPath || String(imgPath).indexOf('blob:') === 0) return;
-            var want = String(imgPath).replace(/^\.\//, '').replace(/^\/+/, '').toLowerCase();
-            var found = packRelSet[want] || Object.keys(packRelSet).some(function (k) {
-              return k === want || k.endsWith('/' + want);
-            });
-            if (!found) pathWarns.push('包内不存在图片路径: ' + imgPath);
-          });
-        });
-        data.images = { first: [], go: [], stop: [], finish: [] };
-        var imgJobs = [];
-        keys.forEach(function (k) {
-          var low = relOf(k).toLowerCase();
-          var im = low.match(/^images\/(first|go|stop|finish)\/.+\.(webp|jpg|jpeg|png|gif)$/);
-          if (im) {
-            imgJobs.push(files[k].async('blob').then(function (blob) {
+      data.images = { first: [], go: [], stop: [], finish: [] };
+      data.videos = data.videos || { first: [], go: [], stop: [], finish: [] };
+      // 收集包内视频为 blob URL，并写入 data.videos
+      var mediaJobs = [];
+      var videoAcc = { first: [], go: [], stop: [], finish: [] };
+      relKeys.forEach(function (rel) {
+        var low = rel.toLowerCase();
+        var im = low.match(/^images\/(first|go|stop|finish)\/.+\.(webp|jpg|jpeg|png|gif)$/);
+        if (im) {
+          (function (phase, file) {
+            mediaJobs.push(Promise.resolve(file).then(function (f) {
+              var blob = (f instanceof Blob) ? f : new Blob([f]);
               var url = URL.createObjectURL(blob);
               packObjectUrls.push(url);
-              data.images[im[1]].push(url);
+              data.images[phase].push(url);
             }));
-          }
+          })(im[1], filesByRel[rel]);
+        }
+        var vm = low.match(/^video\/(first|go|stop|finish)\/.+\.(mp4|webm|mov)$/);
+        if (vm) {
+          (function (phase, file) {
+            mediaJobs.push(Promise.resolve(file).then(function (f) {
+              var blob = (f instanceof Blob) ? f : new Blob([f]);
+              var url = URL.createObjectURL(blob);
+              packObjectUrls.push(url);
+              videoAcc[phase].push(url);
+            }));
+          })(vm[1], filesByRel[rel]);
+        }
+      });
+      return Promise.all(mediaJobs).then(function () {
+        ['first', 'go', 'stop', 'finish'].forEach(function (ph) {
+          if (videoAcc[ph].length) data.videos[ph] = videoAcc[ph];
         });
-        return Promise.all(imgJobs).then(function () {
-          return { data: data, warnings: (parsed.warnings || []).concat(pathWarns) };
-        });
+        return { data: data, warnings: (parsed.warnings || []).concat(pathWarns) };
       });
     }).then(function (ctx) {
       var nAudio = Object.keys(packAudioUrls).length;
       var warns = (ctx.warnings || []).slice();
-      // 校验 messages 里写的图片路径是否在包内（相对路径）
-      var listed = [];
-      ['go', 'stop', 'finish'].forEach(function (ph) {
-        ((ctx.data.imagesListed && ctx.data.imagesListed[ph]) || []).forEach(function (p) {
-          listed.push(ph + ':' + p);
-        });
-      });
-      // audioIdx without file in pack (and not relying on site default — warn only if pack had some audio)
       if (nAudio > 0) {
         ['first', 'go', 'stop', 'finish'].forEach(function (ph) {
           (ctx.data[ph] || []).forEach(function (row) {
@@ -523,9 +563,8 @@
           });
         });
       }
-      audioPools = { go: [], stop: [], finish: [] };
-      var msg = '已加载资料包：' + file.name + '（包内语音 ' + nAudio + ' 条，仅本局）';
-      applyMessages(ctx.data, msg);
+      audioPools = { first: [], go: [], stop: [], finish: [] };
+      applyMessages(ctx.data, '已加载：' + (label || '本地资料包') + '（语音 ' + nAudio + ' 条，仅本局）');
       if (warns.length) {
         var show = warns.slice(0, 8).join('；');
         if (warns.length > 8) show += '；…共' + warns.length + '条';
@@ -534,6 +573,84 @@
     }).catch(function (err) {
       console.error(err);
       $('#packStatus').removeClass('def').addClass('err').text('资料包失败：' + (err.message || err));
+    });
+  }
+
+  function loadPackZip(file) {
+    if (typeof JSZip === 'undefined') {
+      $('#packStatus').addClass('err').text('JSZip 未加载，请检查网络后刷新');
+      return;
+    }
+    $('#packStatus').removeClass('err').text('正在解压 zip…');
+    JSZip.loadAsync(file).then(function (zip) {
+      var entries = {};
+      var jobs = [];
+      zip.forEach(function (relPath, entry) {
+        if (entry.dir) return;
+        var p = normalizeZipPath(relPath);
+        jobs.push(entry.async('blob').then(function (blob) {
+          entries[p] = blob;
+        }));
+      });
+      return Promise.all(jobs).then(function () {
+        return loadPackFromEntries(entries, file.name);
+      });
+    }).catch(function (err) {
+      console.error(err);
+      $('#packStatus').removeClass('def').addClass('err').text('zip 失败：' + (err.message || err));
+    });
+  }
+
+  /** input[webkitdirectory] 的 FileList */
+  function loadPackFromFileList(fileList) {
+    var entries = {};
+    Array.prototype.forEach.call(fileList, function (f) {
+      var rel = normalizeZipPath(f.webkitRelativePath || f.name);
+      // 去掉用户选中文件夹名这一层以外已在 webkitRelativePath 中
+      entries[rel] = f;
+    });
+    return loadPackFromEntries(entries, '本地文件夹');
+  }
+
+  /** Chrome/Edge：showDirectoryPicker */
+  function loadPackFromDirectoryHandle(dirHandle) {
+    var entries = {};
+    function walk(handle, prefix) {
+      return handle.values().then(function (iter) {
+        // async iterator polyfill via recursive
+        return (async function () {
+          for await (var entry of handle.values()) {
+            var path = prefix ? prefix + '/' + entry.name : entry.name;
+            if (entry.kind === 'file') {
+              var file = await entry.getFile();
+              entries[normalizeZipPath(path)] = file;
+            } else if (entry.kind === 'directory') {
+              await walk(entry, path);
+            }
+          }
+        })();
+      });
+    }
+    // handle.values() returns async iterator — use async IIFE from promise
+    return (async function () {
+      for await (var entry of dirHandle.values()) {
+        var path = entry.name;
+        if (entry.kind === 'file') {
+          entries[normalizeZipPath(path)] = await entry.getFile();
+        } else if (entry.kind === 'directory') {
+          await (async function walk2(h, pref) {
+            for await (var e of h.values()) {
+              var p2 = pref + '/' + e.name;
+              if (e.kind === 'file') entries[normalizeZipPath(p2)] = await e.getFile();
+              else if (e.kind === 'directory') await walk2(e, p2);
+            }
+          })(entry, path);
+        }
+      }
+      return loadPackFromEntries(entries, dirHandle.name || '本地文件夹');
+    })().catch(function (err) {
+      console.error(err);
+      $('#packStatus').removeClass('def').addClass('err').text('读取文件夹失败：' + (err.message || err));
     });
   }
 
@@ -1057,6 +1174,22 @@ function applyScale(scale) {
     $('#packFile').on('change', function () {
       var f = this.files && this.files[0];
       if (f) handlePackFile(f);
+    });
+    $('#packDir').on('change', function () {
+      if (this.files && this.files.length) loadPackFromFileList(this.files);
+    });
+    $('#btnPickDir').on('click', function () {
+      if (window.showDirectoryPicker) {
+        window.showDirectoryPicker().then(function (handle) {
+          return loadPackFromDirectoryHandle(handle);
+        }).catch(function (err) {
+          if (err && err.name === 'AbortError') return;
+          // fallback: trigger hidden directory input
+          $('#packDir').trigger('click');
+        });
+      } else {
+        $('#packDir').trigger('click');
+      }
     });
     $('#btnPackReset').on('click', function () {
       resetToDefault();
