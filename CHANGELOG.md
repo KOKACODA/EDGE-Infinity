@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.10.2] - 2026-09-25
+
+### Added
+- go background video video/go/go_0.mp4 (H.264 muted loop)
+- messages.videos field
+
+
 ## [1.10.1] - 2026-09-25
 
 ### Changed

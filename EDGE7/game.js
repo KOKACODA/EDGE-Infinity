@@ -169,11 +169,35 @@
     }
   }
 
+  function stopBgVideo() {
+    var v = document.getElementById('bgVideo');
+    if (!v) return;
+    try { v.pause(); } catch (e) {}
+    v.removeAttribute('src');
+    try { v.load(); } catch (e) {}
+    v.style.display = 'none';
+  }
+
   function showBg(phase) {
+    var vids = (MSG.videos && MSG.videos[phase]) || (window.videos && window.videos[phase]) || [];
     var imgs = (MSG.images && MSG.images[phase]) || [];
+    var v = document.getElementById('bgVideo');
+    if (vids.length > 0 && v) {
+      var url = vids[Math.floor(Math.random() * vids.length)];
+      $('#mainwrapper').css('background-image', 'none');
+      if (v.getAttribute('src') !== url) {
+        v.src = url;
+        try { v.load(); } catch (e) {}
+      }
+      v.style.display = 'block';
+      var p = v.play();
+      if (p && p.catch) p.catch(function () {});
+      return;
+    }
+    stopBgVideo();
     if (imgs.length > 0) {
-      var url = imgs[Math.floor(Math.random() * imgs.length)];
-      $('#mainwrapper').css('background-image', 'url(' + url + ')');
+      var imgUrl = imgs[Math.floor(Math.random() * imgs.length)];
+      $('#mainwrapper').css('background-image', 'url(' + imgUrl + ')');
     } else {
       $('#mainwrapper').css('background-image', 'none');
     }
@@ -338,6 +362,7 @@
     MSG = data;
     window.messages = data;
     window.images = data.images || { go: [], stop: [], finish: [] };
+        window.videos = data.videos || { go: [], stop: [], finish: [] };
     preloadAudio();
     buildVoiceLibrary();
     var $st = $('#packStatus');
@@ -554,6 +579,7 @@
   }
 
   function showHome() {
+    stopBgVideo();
     $('#voiceLibPage').removeClass('open').hide();
     $('#packPage').removeClass('open').hide();
     $('#gamewrapper').hide();
@@ -570,6 +596,7 @@
     window.__edgeTimerRunning = false;
     clearInterval(window.flashInterval);
     stopAllAudio();
+    stopBgVideo();
     try { if (noSleep) noSleep.disable(); } catch (e) {}
     $('#mainwrapper').removeClass('go stop finish cancel');
     showHome();
@@ -1008,6 +1035,7 @@ function applyScale(scale) {
         defaultMSG = JSON.parse(JSON.stringify(data));
         window.messages = data;
         window.images = data.images || { go: [], stop: [], finish: [] };
+        window.videos = data.videos || { go: [], stop: [], finish: [] };
         preloadAudio();
         buildVoiceLibrary();
         bindUI();

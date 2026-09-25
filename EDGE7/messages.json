@@ -1,5 +1,5 @@
 {
-  "version": "1.10.1",
+  "version": "1.10.2",
   "phases": {
     "phase2": "现在进入第二阶段，节奏会明显加快！贱狗依然没有射精的权利，给老子好好憋着！",
     "phase3": "这是最后阶段！贱狗随时可能会被允许射精，也可能被主人无情拒绝！做好心理准备！"
@@ -444,5 +444,12 @@
       "video/finish/"
     ],
     "note": "Put files in these folders under EDGE7/, then list relative paths in images.go/stop/finish arrays. Video not wired yet."
+  },
+  "videos": {
+    "go": [
+      "video/go/go_0.mp4"
+    ],
+    "stop": [],
+    "finish": []
   }
 }
