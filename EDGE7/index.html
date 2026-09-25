@@ -13,9 +13,11 @@
 
 #bgVideo {
   position: fixed;
-  left: 0; top: 0;
-  width: 100%; height: 100%;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   object-fit: cover;
+  object-position: center center;
   z-index: 0;
   display: none;
   pointer-events: none;
@@ -24,8 +26,22 @@
 #mainwrapper {
   position: relative;
   z-index: 1;
-
   font-size: calc(16px * var(--ui-scale));
+  min-height: 100%;
+  background-size: cover !important;
+  background-position: center center !important;
+  background-repeat: no-repeat !important;
+}
+/* 有视频/全屏图时：去掉实色底，让背景层透出来（仍是同一画面，不是切页） */
+#mainwrapper.has-bg-media,
+#mainwrapper.has-bg-media.go,
+#mainwrapper.has-bg-media.stop,
+#mainwrapper.has-bg-media.finish,
+#mainwrapper.has-bg-media.cancel {
+  background-color: transparent !important;
+}
+#mainwrapper.has-bg-media #message {
+  text-shadow: 0 0 6px #000, 0 0 12px #000, 1px 1px 2px #000;
 }
 
 #choose h2.title-row {

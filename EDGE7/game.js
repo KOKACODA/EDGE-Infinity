@@ -171,35 +171,54 @@
 
   function stopBgVideo() {
     var v = document.getElementById('bgVideo');
-    if (!v) return;
-    try { v.pause(); } catch (e) {}
-    v.removeAttribute('src');
-    try { v.load(); } catch (e) {}
-    v.style.display = 'none';
+    if (v) {
+      try { v.pause(); } catch (e) {}
+      v.removeAttribute('src');
+      v.removeAttribute('data-src');
+      try { v.load(); } catch (e) {}
+      v.style.display = 'none';
+    }
+    $('#mainwrapper').removeClass('has-bg-media').css('background-image', 'none');
   }
 
+  /** phase: first | go | stop | finish — 视频/图片铺满全屏作背景，不切页面 */
   function showBg(phase) {
     var vids = (MSG.videos && MSG.videos[phase]) || (window.videos && window.videos[phase]) || [];
+    // 开场若未单独配置 first 视频，回退到 go
+    if (phase === 'first' && (!vids || !vids.length)) {
+      vids = (MSG.videos && MSG.videos.go) || (window.videos && window.videos.go) || [];
+    }
     var imgs = (MSG.images && MSG.images[phase]) || [];
+    if (phase === 'first' && (!imgs || !imgs.length)) {
+      imgs = (MSG.images && MSG.images.go) || [];
+    }
+    var $mw = $('#mainwrapper');
     var v = document.getElementById('bgVideo');
+
     if (vids.length > 0 && v) {
       var url = vids[Math.floor(Math.random() * vids.length)];
-      $('#mainwrapper').css('background-image', 'none');
-      if (v.getAttribute('src') !== url) {
+      $mw.css('background-image', 'none').addClass('has-bg-media');
+      if (v.getAttribute('data-src') !== url) {
+        v.setAttribute('data-src', url);
         v.src = url;
         try { v.load(); } catch (e) {}
       }
       v.style.display = 'block';
-      var p = v.play();
-      if (p && p.catch) p.catch(function () {});
+      var playP = v.play();
+      if (playP && playP.catch) playP.catch(function () {});
       return;
     }
+
     stopBgVideo();
     if (imgs.length > 0) {
       var imgUrl = imgs[Math.floor(Math.random() * imgs.length)];
-      $('#mainwrapper').css('background-image', 'url(' + imgUrl + ')');
+      $mw.addClass('has-bg-media').css({
+        'background-image': 'url(' + imgUrl + ')',
+        'background-size': 'cover',
+        'background-position': 'center center'
+      });
     } else {
-      $('#mainwrapper').css('background-image', 'none');
+      $mw.removeClass('has-bg-media').css('background-image', 'none');
     }
   }
 
@@ -362,7 +381,7 @@
     MSG = data;
     window.messages = data;
     window.images = data.images || { go: [], stop: [], finish: [] };
-        window.videos = data.videos || { go: [], stop: [], finish: [] };
+        window.videos = data.videos || { first: [], go: [], stop: [], finish: [] };
     preloadAudio();
     buildVoiceLibrary();
     var $st = $('#packStatus');
@@ -890,7 +909,7 @@ function applyScale(scale) {
         if (session.pass === 1) {
           var first = MSG.first[0];
           $mw.removeClass('go stop finish cancel').addClass('go');
-          showBg('go');
+          showBg('first');
           $('#message').html(first[0]);
           // 开场也播语音：first 最后一项 audioIdx → go_{n}.wav
           playVoice('first', getAudioIdx('first', first));
@@ -1035,7 +1054,7 @@ function applyScale(scale) {
         defaultMSG = JSON.parse(JSON.stringify(data));
         window.messages = data;
         window.images = data.images || { go: [], stop: [], finish: [] };
-        window.videos = data.videos || { go: [], stop: [], finish: [] };
+        window.videos = data.videos || { first: [], go: [], stop: [], finish: [] };
         preloadAudio();
         buildVoiceLibrary();
         bindUI();
