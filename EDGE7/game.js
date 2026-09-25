@@ -1,5 +1,5 @@
 /**
- * EDGE-Infinity game logic (v1.8.0)
+ * EDGE-Infinity game logic (v1.9.0)
  */
 (function (window, $) {
   'use strict';
@@ -174,7 +174,191 @@
     return (d.textContent || d.innerText || '').replace(/\s+/g, ' ').trim();
   }
 
-  function buildVoiceLibrary() {
+  var defaultMSG = null; // website default snapshot
+
+  function cellStr(v) {
+    if (v === null || v === undefined) return '';
+    return String(v).trim();
+  }
+  function cellNum(v, fallback) {
+    if (v === null || v === undefined || v === '') return fallback;
+    var n = Number(v);
+    return isNaN(n) ? fallback : n;
+  }
+  function parseTags(s) {
+    s = cellStr(s);
+    if (!s) return ['base'];
+    return s.split(/[,，;；\s]+/).map(function (x) { return x.trim(); }).filter(Boolean);
+  }
+
+  /** SheetJS workbook → messages-like object */
+  function messagesFromWorkbook(wb) {
+    function sheetRows(name) {
+      var sheet = wb.Sheets[name];
+      if (!sheet) return null;
+      return XLSX.utils.sheet_to_json(sheet, { defval: '', raw: false });
+    }
+    function col(row, keys) {
+      for (var i = 0; i < keys.length; i++) {
+        if (row[keys[i]] !== undefined && row[keys[i]] !== '') return row[keys[i]];
+      }
+      // fuzzy: first matching key substring
+      var rk = Object.keys(row);
+      for (var k = 0; k < keys.length; k++) {
+        for (var j = 0; j < rk.length; j++) {
+          if (rk[j].indexOf(keys[k]) >= 0) return row[rk[j]];
+        }
+      }
+      return '';
+    }
+
+    var errors = [];
+    var firstRows = sheetRows('开场');
+    var goRows = sheetRows('go');
+    var stopRows = sheetRows('stop');
+    var finishRows = sheetRows('finish');
+    if (!goRows || !stopRows || !finishRows) {
+      errors.push('缺少工作表：需要「开场」「go」「stop」「finish」（开场可空，其余必有）');
+    }
+    if (errors.length) return { ok: false, errors: errors };
+
+    var out = {
+      version: (defaultMSG && defaultMSG.version) || 'excel',
+      phases: (defaultMSG && defaultMSG.phases) ? JSON.parse(JSON.stringify(defaultMSG.phases)) : {
+        phase2: '第二阶段', phase3: '最后阶段'
+      },
+      gameover: (defaultMSG && defaultMSG.gameover) ? JSON.parse(JSON.stringify(defaultMSG.gameover)) : {},
+      first: [],
+      go: [],
+      stop: [],
+      finish: [],
+      tags: { go: [], stop: [], finish: [] },
+      images: { go: [], stop: [], finish: [] },
+      audioCounts: {}
+    };
+
+    // 开场
+    (firstRows || []).forEach(function (row) {
+      var text = cellStr(col(row, ['文案', 'text']));
+      if (!text) return;
+      var idx = cellNum(col(row, ['编号audioIdx', '编号', 'audioIdx']), 0);
+      var sec = cellNum(col(row, ['秒数', 'duration']), 45);
+      var fps = cellNum(col(row, ['fps']), 2);
+      out.first.push([text, sec, fps, idx]);
+      var img = cellStr(col(row, ['图片路径', '图片']));
+      if (img) out.images.go.push(img);
+    });
+    if (!out.first.length && defaultMSG && defaultMSG.first) {
+      out.first = JSON.parse(JSON.stringify(defaultMSG.first));
+    }
+
+    (goRows || []).forEach(function (row) {
+      var text = cellStr(col(row, ['文案', 'text']));
+      if (!text) return;
+      var idx = cellNum(col(row, ['编号audioIdx', '编号', 'audioIdx']), out.go.length);
+      var sec = cellNum(col(row, ['秒数', 'duration']), 20);
+      var fps = cellNum(col(row, ['fps']), 3);
+      out.go.push([text, sec, fps, idx]);
+      out.tags.go.push(parseTags(col(row, ['标签tags', '标签', 'tags'])));
+      var img = cellStr(col(row, ['图片路径', '图片']));
+      if (img) out.images.go.push(img);
+    });
+
+    (stopRows || []).forEach(function (row) {
+      var text = cellStr(col(row, ['文案', 'text']));
+      if (!text) return;
+      var idx = cellNum(col(row, ['编号audioIdx', '编号', 'audioIdx']), out.stop.length);
+      var sec = cellNum(col(row, ['秒数', 'duration']), 20);
+      out.stop.push([text, sec, idx]);
+      out.tags.stop.push(parseTags(col(row, ['标签tags', '标签', 'tags'])));
+      var img = cellStr(col(row, ['图片路径', '图片']));
+      if (img) out.images.stop.push(img);
+    });
+
+    (finishRows || []).forEach(function (row) {
+      var text = cellStr(col(row, ['文案', 'text']));
+      if (!text) return;
+      var idx = cellNum(col(row, ['编号audioIdx', '编号', 'audioIdx']), out.finish.length);
+      var sec = cellNum(col(row, ['秒数', 'duration']), 25);
+      var color = cellStr(col(row, ['颜色green或red', '颜色', 'color'])).toLowerCase();
+      if (color !== 'green' && color !== 'red') {
+        errors.push('finish 编号 ' + idx + ' 颜色必须是 green 或 red，当前：' + color);
+        color = 'red';
+      }
+      var fps = cellNum(col(row, ['fps']), 2);
+      out.finish.push([text, sec, color, fps, idx]);
+      out.tags.finish.push(parseTags(col(row, ['标签tags', '标签', 'tags'])));
+      var img = cellStr(col(row, ['图片路径', '图片']));
+      if (img) out.images.finish.push(img);
+    });
+
+    if (!out.go.length) errors.push('go 表没有有效文案行');
+    if (!out.stop.length) errors.push('stop 表没有有效文案行');
+    if (!out.finish.length) errors.push('finish 表没有有效文案行');
+    var hasRed = out.finish.some(function (r) { return r[2] === 'red'; });
+    var hasGreen = out.finish.some(function (r) { return r[2] === 'green'; });
+    if (!hasRed) errors.push('finish 至少需要 1 条 red（不允许）');
+    if (!hasGreen) errors.push('警告：finish 没有 green（允许）行，有概率允许的选项将无法抽到允许结局');
+
+    out.audioCounts = {
+      go: out.go.length,
+      stop: out.stop.length,
+      finish: out.finish.length
+    };
+
+    if (errors.length && (errors.some(function (e) { return e.indexOf('警告') !== 0; }))) {
+      // hard errors only
+      var hard = errors.filter(function (e) { return e.indexOf('警告') !== 0; });
+      if (hard.length) return { ok: false, errors: errors };
+    }
+    return { ok: true, data: out, warnings: errors.filter(function (e) { return e.indexOf('警告') === 0; }) };
+  }
+
+  function applyMessages(data, label) {
+    MSG = data;
+    window.messages = data;
+    window.images = data.images || { go: [], stop: [], finish: [] };
+    preloadAudio();
+    buildVoiceLibrary();
+    var $st = $('#packStatus');
+    $st.removeClass('err def').text(label || '已加载自定义表格（仅本局）');
+  }
+
+  function resetToDefault() {
+    if (!defaultMSG) return;
+    applyMessages(JSON.parse(JSON.stringify(defaultMSG)), '');
+    $('#packStatus').removeClass('err').addClass('def').text('当前：网站默认内容');
+    $('#packFile').val('');
+  }
+
+  function handlePackFile(file) {
+    if (!file) return;
+    if (typeof XLSX === 'undefined') {
+      $('#packStatus').addClass('err').text('表格库未加载，请检查网络后刷新');
+      return;
+    }
+    var reader = new FileReader();
+    reader.onload = function (e) {
+      try {
+        var wb = XLSX.read(e.target.result, { type: 'array' });
+        var result = messagesFromWorkbook(wb);
+        if (!result.ok) {
+          $('#packStatus').removeClass('def').addClass('err').text('加载失败：' + result.errors.join('；'));
+          return;
+        }
+        applyMessages(result.data, '已加载：' + file.name + '（仅本局，不上传）');
+        if (result.warnings && result.warnings.length) {
+          $('#packStatus').append(' · ' + result.warnings.join('；'));
+        }
+      } catch (err) {
+        console.error(err);
+        $('#packStatus').removeClass('def').addClass('err').text('无法解析文件：' + (err.message || err));
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+    function buildVoiceLibrary() {
     var $body = $('#voiceLibBody');
     $body.empty();
     function section(title, phase, list) {
@@ -456,6 +640,14 @@
   }
 
   function bindUI() {
+    $('#packFile').on('change', function () {
+      var f = this.files && this.files[0];
+      if (f) handlePackFile(f);
+    });
+    $('#btnPackReset').on('click', function () {
+      resetToDefault();
+    });
+
     $('#submit').on('click', function (e) {
       e.preventDefault();
       e.stopPropagation();
@@ -502,12 +694,14 @@
       .then(function (r) { return r.json(); })
       .then(function (data) {
         MSG = data;
+        defaultMSG = JSON.parse(JSON.stringify(data));
         window.messages = data;
         window.images = data.images || { go: [], stop: [], finish: [] };
         preloadAudio();
         buildVoiceLibrary();
         bindUI();
         $('#bootStatus').text('就绪 v' + (data.version || '') + ' · 语音已预载');
+        $('#packStatus').removeClass('err').addClass('def').text('当前：网站默认内容');
       })
       .catch(function (err) {
         console.error(err);
