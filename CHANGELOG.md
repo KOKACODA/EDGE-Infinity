@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.11.2] - 2026-09-26
+
+### Fixed
+- Background video/image only for matching `phase_N` (e.g. go_0 only on statement audioIdx 0)
+- No media when statement has no corresponding file
+
+## [1.11.1] - 2026-09-25
+
+
 ## [1.11.1] - 2026-09-25
 
 ### Added

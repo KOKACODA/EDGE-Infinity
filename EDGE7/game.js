@@ -19,6 +19,8 @@
   var audioPools = { go: [], stop: [], finish: [] };
   /** @type {Object.<string, string>} key phase:idx -> blob/object URL from local pack */
   var packAudioUrls = {};
+  var packVideoUrls = {}; // phase:idx -> blob/url
+  var packImageUrls = {};
   var packObjectUrls = []; // for revoke on reset
   var session = null;
   var unlocked = false;
@@ -180,19 +182,50 @@
     $('#mainwrapper').removeClass('has-bg-media').css('background-image', 'none');
   }
 
-  /** phase: first | go | stop | finish — 视频/图片铺满全屏作背景，不切页面 */
-  function showBg(phase) {
+  /** 仅当存在 phase_idx 对应资源时才显示；无资源则清空背景 */
+  function matchMediaPath(url, phase, audioIdx) {
+    if (!url || audioIdx === undefined || audioIdx === null || audioIdx < 0) return false;
+    var u = String(url);
+    // blob: 无法从 URL 判断编号，需走 packVideoUrls/packImageUrls
+    if (u.indexOf('blob:') === 0) return false;
+    var re = new RegExp('(?:^|[/\\])' + phase + '_' + audioIdx + '\\.(mp4|webm|mov|webp|jpe?g|png|gif)(?:\\?|$)', 'i');
+    return re.test(u);
+  }
+
+  function resolveVideo(phase, audioIdx) {
+    if (audioIdx === undefined || audioIdx === null || audioIdx < 0) return null;
+    var key = phase + ':' + audioIdx;
+    if (packVideoUrls[key]) return packVideoUrls[key];
     var vids = (MSG.videos && MSG.videos[phase]) || (window.videos && window.videos[phase]) || [];
+    for (var i = 0; i < vids.length; i++) {
+      if (matchMediaPath(vids[i], phase, audioIdx)) return vids[i];
+    }
+    return null;
+  }
+
+  function resolveImage(phase, audioIdx) {
+    if (audioIdx === undefined || audioIdx === null || audioIdx < 0) return null;
+    var key = phase + ':' + audioIdx;
+    if (packImageUrls[key]) return packImageUrls[key];
     var imgs = (MSG.images && MSG.images[phase]) || [];
+    for (var i = 0; i < imgs.length; i++) {
+      if (matchMediaPath(imgs[i], phase, audioIdx)) return imgs[i];
+    }
+    return null;
+  }
+
+  /** phase + audioIdx：只加载该语句编号对应的视频/图片 */
+  function showBg(phase, audioIdx) {
     var $mw = $('#mainwrapper');
     var v = document.getElementById('bgVideo');
+    var vidUrl = resolveVideo(phase, audioIdx);
+    var imgUrl = resolveImage(phase, audioIdx);
 
-    if (vids.length > 0 && v) {
-      var url = vids[Math.floor(Math.random() * vids.length)];
+    if (vidUrl && v) {
       $mw.css('background-image', 'none').addClass('has-bg-media');
-      if (v.getAttribute('data-src') !== url) {
-        v.setAttribute('data-src', url);
-        v.src = url;
+      if (v.getAttribute('data-src') !== vidUrl) {
+        v.setAttribute('data-src', vidUrl);
+        v.src = vidUrl;
         try { v.load(); } catch (e) {}
       }
       v.style.display = 'block';
@@ -201,9 +234,18 @@
       return;
     }
 
-    stopBgVideo();
-    if (imgs.length > 0) {
-      var imgUrl = imgs[Math.floor(Math.random() * imgs.length)];
+    // 无对应视频：停视频
+    if (v) {
+      try { v.pause(); } catch (e) {}
+      if (v.getAttribute('data-src')) {
+        v.removeAttribute('src');
+        v.removeAttribute('data-src');
+        try { v.load(); } catch (e2) {}
+      }
+      v.style.display = 'none';
+    }
+
+    if (imgUrl) {
       $mw.addClass('has-bg-media').css({
         'background-image': 'url(' + imgUrl + ')',
         'background-size': 'cover',
@@ -521,27 +563,29 @@
       var videoAcc = { first: [], go: [], stop: [], finish: [] };
       relKeys.forEach(function (rel) {
         var low = rel.toLowerCase();
-        var im = low.match(/^images\/(first|go|stop|finish)\/.+\.(webp|jpg|jpeg|png|gif)$/);
-        if (im) {
-          (function (phase, file) {
+        var im = low.match(/^images\/(first|go|stop|finish)\/(first|go|stop|finish)_(\d+)\.(webp|jpg|jpeg|png|gif)$/);
+        if (im && im[1] === im[2]) {
+          (function (phase, idx, file) {
             mediaJobs.push(Promise.resolve(file).then(function (f) {
               var blob = (f instanceof Blob) ? f : new Blob([f]);
               var url = URL.createObjectURL(blob);
               packObjectUrls.push(url);
+              packImageUrls[phase + ':' + idx] = url;
               data.images[phase].push(url);
             }));
-          })(im[1], filesByRel[rel]);
+          })(im[1], im[3], filesByRel[rel]);
         }
-        var vm = low.match(/^video\/(first|go|stop|finish)\/.+\.(mp4|webm|mov)$/);
-        if (vm) {
-          (function (phase, file) {
+        var vm = low.match(/^video\/(first|go|stop|finish)\/(first|go|stop|finish)_(\d+)\.(mp4|webm|mov)$/);
+        if (vm && vm[1] === vm[2]) {
+          (function (phase, idx, file) {
             mediaJobs.push(Promise.resolve(file).then(function (f) {
               var blob = (f instanceof Blob) ? f : new Blob([f]);
               var url = URL.createObjectURL(blob);
               packObjectUrls.push(url);
+              packVideoUrls[phase + ':' + idx] = url;
               videoAcc[phase].push(url);
             }));
-          })(vm[1], filesByRel[rel]);
+          })(vm[1], vm[3], filesByRel[rel]);
         }
       });
       return Promise.all(mediaJobs).then(function () {
@@ -1092,7 +1136,7 @@ function applyScale(scale) {
           var first = (MSG.first && MSG.first[0]) ? MSG.first[0] : null;
           if (first) {
             $mw.removeClass('go stop finish cancel').addClass('go');
-            showBg('first');
+            showBg('first', getAudioIdx('first', first));
             $('#message').html(first[0]);
             playVoice('first', getAudioIdx('first', first));
             updateFlash(typeof first[2] === 'number' ? first[2] : 2);
@@ -1105,7 +1149,7 @@ function applyScale(scale) {
         var picked = pickMessage(passType, modeKey, useFleshlight, session.lastPick, session.recentTags);
         session.recentTags = session.recentTags.concat(picked.tags).slice(-6);
         $mw.removeClass('go stop finish cancel').addClass(passType);
-        showBg(passType);
+        showBg(passType, getAudioIdx(passType, picked.msg));
         $('#message').html(picked.msg[0]);
         playVoice(passType, getAudioIdx(passType, picked.msg));
         updateFlash(getFps(passType, picked.msg));
@@ -1151,7 +1195,7 @@ function applyScale(scale) {
         playVoice('finish', getAudioIdx('finish', randomMessage));
 
         if (randomMessage[2] === 'green') {
-          showBg('finish');
+          showBg('finish', getAudioIdx('finish', randomMessage));
           $mw.removeClass('go stop cancel').addClass('finish');
           showProgressAndGoOn(randomMessage[1] * 1000, end, 'cumbar');
         } else {
