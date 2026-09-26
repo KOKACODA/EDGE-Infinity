@@ -202,6 +202,13 @@
     for (var i = 0; i < vids.length; i++) {
       if (matchMediaPath(vids[i], phase, audioIdx)) return vids[i];
     }
+    // finish：无对应编号视频时，回退 finish_0（包内或站点列表）
+    if (phase === 'finish') {
+      if (packVideoUrls['finish:0']) return packVideoUrls['finish:0'];
+      for (var j = 0; j < vids.length; j++) {
+        if (matchMediaPath(vids[j], 'finish', 0)) return vids[j];
+      }
+    }
     return null;
   }
 
