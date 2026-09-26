@@ -186,10 +186,12 @@
   function matchMediaPath(url, phase, audioIdx) {
     if (!url || audioIdx === undefined || audioIdx === null || audioIdx < 0) return false;
     var u = String(url);
-    // blob: 无法从 URL 判断编号，需走 packVideoUrls/packImageUrls
     if (u.indexOf('blob:') === 0) return false;
-    var re = new RegExp('(?:^|[/\\])' + phase + '_' + audioIdx + '\\.(mp4|webm|mov|webp|jpe?g|png|gif)(?:\\?|$)', 'i');
-    return re.test(u);
+    var file = u.split('?')[0];
+    var slash = Math.max(file.lastIndexOf('/'), file.lastIndexOf('\\'));
+    if (slash >= 0) file = file.slice(slash + 1);
+    var re = new RegExp('^' + phase + '_' + audioIdx + '\\.(mp4|webm|mov|webp|jpe?g|png|gif)$', 'i');
+    return re.test(file);
   }
 
   function resolveVideo(phase, audioIdx) {
