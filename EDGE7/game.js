@@ -715,25 +715,35 @@
       var out = { video: null, image: null };
       var vids = (MSG.videos && MSG.videos[phase]) || [];
       var imgs = (MSG.images && MSG.images[phase]) || [];
-      var i, u, needle;
-      needle = phase + '_' + audioIdx;
+      var i;
       for (i = 0; i < vids.length; i++) {
-        u = String(vids[i]);
-        if (u.indexOf(needle) >= 0 || u.indexOf('_' + audioIdx + '.') >= 0) {
-          out.video = u;
+        if (matchMediaPath(vids[i], phase, audioIdx)) {
+          out.video = vids[i];
           break;
         }
       }
-      if (!out.video && vids.length === 1 && audioIdx === 0) out.video = vids[0];
+      if (!out.video && phase === 'finish') {
+        for (i = 0; i < vids.length; i++) {
+          if (matchMediaPath(vids[i], 'finish', 0)) {
+            out.video = vids[i];
+            break;
+          }
+        }
+      }
+      if (!out.video && packVideoUrls[phase + ':' + audioIdx]) {
+        out.video = packVideoUrls[phase + ':' + audioIdx];
+      }
+      if (!out.video && phase === 'finish' && packVideoUrls['finish:0']) {
+        out.video = packVideoUrls['finish:0'];
+      }
       for (i = 0; i < imgs.length; i++) {
-        u = String(imgs[i]);
-        if (u.indexOf(needle) >= 0 || u.indexOf('_' + audioIdx + '.') >= 0) {
-          out.image = u;
+        if (matchMediaPath(imgs[i], phase, audioIdx)) {
+          out.image = imgs[i];
           break;
         }
       }
-      if (!out.image && imgs.length && audioIdx >= 0 && audioIdx < imgs.length) {
-        out.image = imgs[audioIdx];
+      if (!out.image && packImageUrls[phase + ':' + audioIdx]) {
+        out.image = packImageUrls[phase + ':' + audioIdx];
       }
       return out;
     }
@@ -796,28 +806,38 @@
   }
 
   function openMediaModal(kind, url) {
+    if (!url) return;
     var $m = $('#mediaModal');
     var $c = $('#mediaModalContent');
+    if (!$m.length || !$c.length) {
+      console.warn('mediaModal DOM missing');
+      return;
+    }
     $c.empty();
     if (kind === 'video') {
       var v = document.createElement('video');
       v.src = url;
       v.controls = true;
       v.autoplay = true;
+      v.muted = false;
       v.playsInline = true;
       v.setAttribute('playsinline', '');
       v.style.maxWidth = '100%';
       v.style.maxHeight = '70vh';
+      v.style.display = 'block';
       $c.append(v);
+      var p = v.play();
+      if (p && p.catch) p.catch(function () {});
     } else {
       var img = document.createElement('img');
       img.src = url;
       img.alt = 'preview';
       img.style.maxWidth = '100%';
       img.style.maxHeight = '70vh';
+      img.style.display = 'block';
       $c.append(img);
     }
-    $m.addClass('open').show();
+    $m.css('display', 'flex').addClass('open').attr('aria-hidden', 'false');
   }
 
   function closeMediaModal() {
@@ -827,7 +847,7 @@
       try { this.pause(); this.removeAttribute('src'); this.load(); } catch (e) {}
     });
     $c.empty();
-    $m.removeClass('open').hide();
+    $m.removeClass('open').css('display', 'none').attr('aria-hidden', 'true');
   }
 
 
@@ -1202,13 +1222,14 @@ function applyScale(scale) {
 
         $('#message').html(randomMessage[0]);
         playVoice('finish', getAudioIdx('finish', randomMessage));
+        // green/red 均加载 finish 视频（无对应编号则回退 finish_0）
+        showBg('finish', getAudioIdx('finish', randomMessage));
 
         if (randomMessage[2] === 'green') {
-          showBg('finish', getAudioIdx('finish', randomMessage));
           $mw.removeClass('go stop cancel').addClass('finish');
           showProgressAndGoOn(randomMessage[1] * 1000, end, 'cumbar');
         } else {
-          // red = 不允许：只显示该 finish 句 + 语音，结束后停住（不 reload、不拼 nocum）
+          // red = 不允许：显示 finish 句 + 语音 + 视频，结束后停住
           $mw.removeClass('go stop finish').addClass('cancel');
           showProgressAndGoOn(randomMessage[1] * 1000, function () {
             session.running = false;
